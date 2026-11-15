@@ -91,6 +91,8 @@ type Model struct {
 	forceShow   map[string]bool
 	forceHide   map[string]bool
 	shownImages map[string]media.Quality
+	expanded    map[string]bool
+	foldable    map[string]bool
 
 	vp         viewport.Model
 	input      *editor
@@ -116,6 +118,8 @@ func New(client *wa.Client, cfg config.Config, images *media.Manager) Model {
 		forceShow:   map[string]bool{},
 		forceHide:   map[string]bool{},
 		shownImages: map[string]media.Quality{},
+		expanded:    map[string]bool{},
+		foldable:    map[string]bool{},
 		vp:          viewport.New(0, 0),
 		input:       in,
 		prompt:      pr,
@@ -201,7 +205,7 @@ func (m *Model) refresh() {
 	}
 	m.allChats = chats
 	for _, c := range chats {
-		m.names[c.JID] = m.wa.ChatName(c)
+		m.names[c.JID] = sanitize(m.wa.ChatName(c))
 	}
 	m.applyFilter()
 	if m.openJID != "" {
@@ -309,12 +313,20 @@ func (m *Model) open(jid string) {
 }
 
 func (m *Model) enterInsert() {
+	m.enterCompose(vimInsert)
+}
+
+func (m *Model) enterCompose(v vimMode) {
 	if m.openJID == "" {
 		return
 	}
 	m.mode = modeInsert
 	m.focus = focusChat
-	m.input.Focus(vimInsert)
+	m.input.Focus(v)
+	if v == vimNormal {
+		m.input.clampNormal()
+	}
+	m.renderMessages(false)
 }
 
 func (m *Model) enterNormal() {

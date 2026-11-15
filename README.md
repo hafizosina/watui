@@ -38,7 +38,7 @@ The screen has two panes: **chat list** (left) and **messages** (right). `Tab` s
 | NORMAL (list) | `j` / `k` | move down / up |
 | | `gg` / `G` | first / last chat |
 | | `Ctrl+d` / `Ctrl+u` | half page |
-| | `Enter` / `l` | open chat |
+| | `Enter` | open chat |
 | | `i` | open chat and type |
 | | `/` | search chats |
 | | `A` | show archived chats |
@@ -47,8 +47,9 @@ The screen has two panes: **chat list** (left) and **messages** (right). `Tab` s
 | | `Space` | message menu (like right-click) |
 | | `i` / `a` / `Enter` | type a message |
 | | `e` | write the message in `$EDITOR` (nvim) |
-| | `h` / `q` / `Esc` | back to the list |
+| | `q` / `Esc` | back to the list |
 | anywhere | `Ctrl+h` / `Ctrl+l` | Chats / Messages box; at the edge, the tmux pane next door |
+| | `Ctrl+j` / `Ctrl+k` | Messages ↔ Compose (Compose opens in NORMAL; from Compose only in NORMAL); at the edge, the tmux pane above/below |
 | | `J` / `K` | next / previous chat |
 | | `:` | command line |
 | Compose | `Ctrl+s` | send (from any vim mode) |
@@ -68,6 +69,7 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 
 | Option | Key | Notes |
 |---|---|---|
+| Expand / Collapse | `z` | only on long messages (folded after `collapse_lines`) |
 | Reply | `r` | the quote shows in the Compose title; `Esc` (in normal mode) cancels |
 | Edit | `e` | your own text messages, first 15 minutes |
 | React | `+` | 👍 ❤️ 😂 😮 😢 🙏 🔥 🎉, or remove yours |
@@ -89,6 +91,7 @@ Commands: `:pin` `:unpin` `:mute` `:unmute` `:archive` `:unarchive` `:archived` 
 images = always        # always | thumbnail | off
 image_width = 40       # biggest picture size, in terminal cells
 image_height = 15
+collapse_lines = 15    # long messages fold after this many lines (0 = never)
 ```
 
 | `images` | What you see |
@@ -101,7 +104,7 @@ Change a setting while watui is running with `:set images=thumbnail` (that only 
 
 Pictures need kitty. Inside tmux they also need `set -g allow-passthrough on` in your tmux config.
 
-With vim-tmux-navigator, tmux steals `Ctrl+h`/`Ctrl+l` unless watui is in its vim pattern. Add `watui` to the pattern by rebinding `C-h`/`C-l` after the `run tpm` line (see `~/.tmux.conf`).
+With vim-tmux-navigator, tmux steals `Ctrl+h`/`Ctrl+l` unless watui is in its vim pattern. Add `watui` to the pattern by rebinding `C-h`/`C-j`/`C-k`/`C-l` after the `run tpm` line (see `~/.tmux.conf`).
 
 ## Where things are stored
 

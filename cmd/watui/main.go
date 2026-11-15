@@ -213,6 +213,8 @@ func run(forceLogin bool) error {
 			p.Send(ui.ChangedMsg{})
 		}
 	}()
+	os.Stdout.WriteString("\x1b[?7l")
+	defer os.Stdout.WriteString("\x1b[?7h")
 	_, err = p.Run()
 	return err
 }

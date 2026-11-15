@@ -198,6 +198,22 @@ func (m *Model) openMessageMenu() {
 		return
 	}
 	var items []menuItem
+	if m.foldable[msg.ID] {
+		label := "Expand message"
+		if m.expanded[msg.ID] {
+			label = "Collapse message"
+		}
+		items = append(items, menuItem{label: label, key: "z", run: func(m *Model) tea.Cmd {
+			if m.expanded[msg.ID] {
+				delete(m.expanded, msg.ID)
+			} else {
+				m.expanded[msg.ID] = true
+			}
+			m.renderMessages(false)
+			m.revealSelection()
+			return nil
+		}})
+	}
 	if !msg.Deleted {
 		items = append(items, menuItem{label: "Reply", key: "r", run: func(m *Model) tea.Cmd {
 			m.replyTo, m.editing = &msg, nil

@@ -188,7 +188,7 @@ func (m Model) composeTitle() string {
 		if !m.replyTo.FromMe {
 			who = m.wa.ContactName(m.replyTo.SenderJID, m.replyTo.SenderName)
 		}
-		return "[3] Replying to " + who + ": " + strings.ReplaceAll(m.replyTo.Text, "\n", " ")
+		return "[3] Replying to " + sanitize(who) + ": " + strings.ReplaceAll(sanitize(m.replyTo.Text), "\n", " ")
 	}
 	return "[3] Compose"
 }
@@ -277,7 +277,7 @@ func (m Model) chatRow(c store.Chat, selected bool, w int) string {
 			badge = styleBadge.Render(n)
 		}
 	}
-	preview := strings.ReplaceAll(c.LastText, "\n", " ")
+	preview := strings.ReplaceAll(sanitize(c.LastText), "\n", " ")
 	preview = ansi.Truncate(preview, max(1, w-3-lipgloss.Width(badge)), "…")
 	gap2 := max(0, w-2-lipgloss.Width(preview)-lipgloss.Width(badge))
 	line2 := paint(lipgloss.NewStyle(), " ") + paint(styleDim, preview) +
@@ -311,7 +311,7 @@ func (m *Model) renderMessages(forceBottom bool) {
 		if n, ok := senderNames[jid]; ok {
 			return n
 		}
-		n := m.wa.ContactName(jid, fallback)
+		n := sanitize(m.wa.ContactName(jid, fallback))
 		senderNames[jid] = n
 		return n
 	}
@@ -326,6 +326,7 @@ func (m *Model) renderMessages(forceBottom bool) {
 	}
 
 	m.shownImages = m.imageSet(w)
+	m.foldable = map[string]bool{}
 	showSel := m.focus == focusChat && m.mode == modeNormal
 	marker := lipgloss.NewStyle().Foreground(colBlue).Bold(true).Render("▌")
 
@@ -361,7 +362,7 @@ func (m *Model) renderMessages(forceBottom bool) {
 		if msg.QuoteID != "" && !msg.Deleted {
 			bar := lipgloss.NewStyle().Foreground(senderColor(msg.QuoteSender)).Render("┃ ")
 			who := lipgloss.NewStyle().Foreground(senderColor(msg.QuoteSender)).Bold(true).Render(nameOfJID(msg.QuoteSender, ""))
-			quoted := ansi.Truncate(strings.ReplaceAll(msg.QuoteText, "\n", " "), max(10, w-8), "…")
+			quoted := ansi.Truncate(strings.ReplaceAll(sanitize(msg.QuoteText), "\n", " "), max(10, w-8), "…")
 			block = append(block, "   "+bar+who, "   "+bar+styleDim.Render(quoted))
 		}
 		q, show := m.shownImages[msg.ID]
@@ -454,7 +455,7 @@ func (m Model) renderBody(msg store.Message, w int, showImage bool, q media.Qual
 	if msg.Deleted {
 		return "   " + styleDeleted.Render("message deleted")
 	}
-	text := msg.Text
+	text := sanitize(msg.Text)
 	var picture []string
 	if showImage {
 		lines, status, ok := m.images.Lines(msg.ID, q)
@@ -465,7 +466,7 @@ func (m Model) renderBody(msg store.Message, w int, showImage bool, q media.Qual
 			}
 			text = captionOf(msg)
 		case ok && status != "":
-			text = msg.Text + " " + styleDim.Render("("+status+")")
+			text = sanitize(msg.Text) + " " + styleDim.Render("("+status+")")
 		}
 	}
 	body := m.renderText(msg, text, w)
@@ -479,7 +480,7 @@ func (m Model) renderBody(msg store.Message, w int, showImage bool, q media.Qual
 }
 
 func captionOf(msg store.Message) string {
-	text := msg.Text
+	text := sanitize(msg.Text)
 	for _, tag := range []string{"[image]", "[sticker]", "[gif]"} {
 		if strings.HasPrefix(text, tag) {
 			return strings.TrimSpace(strings.TrimPrefix(text, tag))
@@ -511,6 +512,14 @@ func (m Model) renderText(msg store.Message, text string, w int) string {
 	lines := strings.Split(strings.TrimRight(body, " \n"), "\n")
 	for i := range lines {
 		lines[i] = "   " + strings.TrimRight(lines[i], " ")
+	}
+	limit := m.cfg.CollapseLines
+	if limit > 0 && len(lines) > limit+2 {
+		m.foldable[msg.ID] = true
+		if !m.expanded[msg.ID] {
+			hidden := len(lines) - limit
+			lines = append(lines[:limit], "   "+lipgloss.NewStyle().Foreground(colBlue).Render(fmt.Sprintf("⋯ %d more lines", hidden))+styleDim.Render(" · space → Expand"))
+		}
 	}
 	lines[len(lines)-1] += suffix
 	return strings.Join(lines, "\n")
@@ -574,7 +583,7 @@ func (m Model) hintPairs() [][2]string {
 	if m.menu != nil {
 		return [][2]string{{"Move", "^n/^p"}, {"Pick", "enter"}, {"Close", "esc"}}
 	}
-	return [][2]string{{"Select", "j/k"}, {"Menu", "space"}, {"Write", "i"}, {"Editor", "e"}, {"Back", "h"}, {"Next/prev chat", "J/K"}, {"Keybindings", "?"}}
+	return [][2]string{{"Select", "j/k"}, {"Menu", "space"}, {"Write", "i"}, {"Editor", "e"}, {"Back", "q"}, {"Next/prev chat", "J/K"}, {"Keybindings", "?"}}
 }
 
 func hints(pairs [][2]string) string {
@@ -591,7 +600,7 @@ func helpView(w int) string {
 		{"j / k", "move down / up"},
 		{"gg / G", "first / last chat"},
 		{"ctrl+d / ctrl+u", "half page down / up"},
-		{"enter / l", "open chat"},
+		{"enter", "open chat"},
 		{"i / a", "open chat and start typing"},
 		{"/", "search chats (esc clears)"},
 		{"A", "toggle archived chats"},
@@ -603,18 +612,20 @@ func helpView(w int) string {
 		{"space", "message menu"},
 		{"i / a / enter", "start typing"},
 		{"e", "write the message in $EDITOR"},
-		{"h / q / esc", "back to chats"},
+		{"q / esc", "back to chats"},
 		{"", ""},
 		{"", "Message menu"},
 		{"ctrl+n / ctrl+p", "next / previous option"},
 		{"enter", "pick option (or press its letter)"},
 		{"esc", "close"},
-		{"options", "reply r · edit e · react + · show/hide image v"},
+		{"options", "expand/collapse z · reply r · edit e · react + · show/hide image v"},
 		{" ", "open image o · copy y · forward f · star s · pin p · delete d"},
 		{"", ""},
 		{"", "Global"},
 		{"1 / 2 / 3", "focus chats / messages / compose"},
 		{"tab", "switch between chats and messages"},
+		{"ctrl+h / ctrl+l", "chats / messages (then tmux pane)"},
+		{"ctrl+j / ctrl+k", "messages ↔ compose (then tmux pane)"},
 		{"J / K", "open next / previous chat"},
 		{":", "command line"},
 		{"?", "keybindings"},

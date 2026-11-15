@@ -21,6 +21,8 @@ type Config struct {
 	Images      ImageMode
 	ImageWidth  int
 	ImageHeight int
+
+	CollapseLines int
 }
 
 func Default() Config {
@@ -28,6 +30,8 @@ func Default() Config {
 		Images:      ImagesAlways,
 		ImageWidth:  40,
 		ImageHeight: 15,
+
+		CollapseLines: 15,
 	}
 }
 
@@ -42,6 +46,9 @@ images = always
 # Biggest picture size, in terminal cells.
 image_width = 40
 image_height = 15
+
+# Long messages show only this many lines until you expand them (Space → Expand). 0 = never fold.
+collapse_lines = 15
 `
 
 func Path() (string, error) {
@@ -115,6 +122,12 @@ func (c *Config) Set(assignment string) error {
 			return fmt.Errorf("image_height must be a number >= 2, got %q", value)
 		}
 		c.ImageHeight = n
+	case "collapse_lines":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 0 {
+			return fmt.Errorf("collapse_lines must be 0 or more, got %q", value)
+		}
+		c.CollapseLines = n
 	default:
 		return fmt.Errorf("unknown setting %q", key)
 	}

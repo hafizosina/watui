@@ -116,7 +116,7 @@ func TestRender(t *testing.T) {
 	if m.mode != modeInsert {
 		t.Fatal("i should enter insert mode")
 	}
-	m = step(m, key("esc"), key("esc"), key("h"), key("/"), key("squ"))
+	m = step(m, key("esc"), key("esc"), key("q"), key("/"), key("squ"))
 	if len(m.chats) != 1 {
 		t.Fatalf("search should leave 1 chat, got %d", len(m.chats))
 	}
@@ -181,5 +181,110 @@ func TestCtrlHL(t *testing.T) {
 	m = step(m, key("i"), tea.KeyMsg{Type: tea.KeyCtrlH})
 	if m.focus != focusList || m.mode != modeNormal {
 		t.Fatal("ctrl+h from compose should leave compose and focus the chat list")
+	}
+}
+
+func TestCtrlJK(t *testing.T) {
+	m := step(testModel(t), tea.WindowSizeMsg{Width: 110, Height: 30}, ChangedMsg{})
+	m = step(m, key("enter"), tea.KeyMsg{Type: tea.KeyCtrlJ})
+	if m.mode != modeInsert || m.input.mode != vimNormal {
+		t.Fatalf("ctrl+j from messages should open compose in normal mode, got mode=%v vim=%v", m.mode, m.input.mode)
+	}
+	m = step(m, tea.KeyMsg{Type: tea.KeyCtrlK})
+	if m.mode != modeNormal || m.focus != focusChat {
+		t.Fatal("ctrl+k from compose normal should go back to messages")
+	}
+	m = step(m, key("i"), key("ab"), tea.KeyMsg{Type: tea.KeyCtrlK})
+	if m.mode != modeInsert || m.input.mode != vimInsert {
+		t.Fatal("ctrl+k in insert mode should not leave compose")
+	}
+	m = step(m, tea.KeyMsg{Type: tea.KeyCtrlJ})
+	if m.input.Value() != "ab\n" {
+		t.Fatalf("ctrl+j in insert should add a new line, got %q", m.input.Value())
+	}
+}
+
+func TestLongMessageScroll(t *testing.T) {
+	m := testModel(t)
+	m.cfg.CollapseLines = 0
+	long := strings.Repeat("baris panjang\n", 40) + "akhir"
+	if err := m.wa.Store.PutMessage(store.Message{ChatJID: "628111@s.whatsapp.net", ID: "LONG", SenderJID: "628111@s.whatsapp.net", TS: time.Now(), Text: long, Status: store.StatusSent, Read: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.wa.Store.PutMessage(store.Message{ChatJID: "628111@s.whatsapp.net", ID: "AFTER", SenderJID: "628111@s.whatsapp.net", TS: time.Now().Add(time.Second), Text: "after", Status: store.StatusSent, Read: true}); err != nil {
+		t.Fatal(err)
+	}
+	m = step(m, tea.WindowSizeMsg{Width: 110, Height: 30}, ChangedMsg{})
+	m = step(m, key("j"), key("enter"))
+	last := len(m.messages) - 1
+	if m.messages[last].ID != "AFTER" {
+		t.Fatalf("want AFTER last, got %s", m.messages[last].ID)
+	}
+	m = step(m, key("k"))
+	if m.messages[m.sel].ID != "LONG" {
+		t.Fatal("k should select the long message")
+	}
+	if !strings.Contains(m.vp.View(), "akhir") {
+		t.Fatal("moving up into a long message should show its end first")
+	}
+	before := m.vp.YOffset
+	m = step(m, key("k"))
+	if m.messages[m.sel].ID != "LONG" || m.vp.YOffset >= before {
+		t.Fatalf("k inside a long message should scroll up within it, sel=%s offset %d -> %d", m.messages[m.sel].ID, before, m.vp.YOffset)
+	}
+	for i := 0; i < 20; i++ {
+		m = step(m, key("k"))
+	}
+	if m.messages[m.sel].ID == "LONG" {
+		t.Fatal("after reaching the top of the long message, k should move to the previous message")
+	}
+	checkFrame(t, m.View(), 110, 30)
+}
+
+func TestFoldLongMessage(t *testing.T) {
+	m := testModel(t)
+	long := strings.Repeat("baris\n", 40) + "akhir"
+	if err := m.wa.Store.PutMessage(store.Message{ChatJID: "628111@s.whatsapp.net", ID: "LONG", SenderJID: "628111@s.whatsapp.net", TS: time.Now(), Text: long, Status: store.StatusSent, Read: true}); err != nil {
+		t.Fatal(err)
+	}
+	m = step(m, tea.WindowSizeMsg{Width: 110, Height: 40}, ChangedMsg{})
+	m = step(m, key("j"), key("enter"))
+	if m.messages[m.sel].ID != "LONG" {
+		t.Fatalf("want LONG selected, got %s", m.messages[m.sel].ID)
+	}
+	view := m.vp.View()
+	if !strings.Contains(view, "26 more lines") || strings.Contains(view, "akhir") {
+		t.Fatal("long message should be folded to 15 lines with a '26 more lines' marker")
+	}
+	m = step(m, key(" "))
+	if m.menu == nil || m.menu.items[0].label != "Expand message" {
+		t.Fatal("menu should offer Expand message first")
+	}
+	m = step(m, key("z"))
+	if strings.Contains(m.vp.View(), "more lines") {
+		t.Fatal("after expand, the marker should be gone")
+	}
+	for i := 0; i < 15; i++ {
+		m = step(m, key("j"))
+	}
+	if !strings.Contains(m.vp.View(), "akhir") {
+		t.Fatal("after expand, j should scroll down to the end of the message")
+	}
+	m = step(m, key(" "), key("z"))
+	if !strings.Contains(m.vp.View(), "more lines") {
+		t.Fatal("collapse should fold it again")
+	}
+	checkFrame(t, m.View(), 110, 40)
+}
+
+func TestHLDoNotSwitchBoxes(t *testing.T) {
+	m := step(testModel(t), tea.WindowSizeMsg{Width: 110, Height: 30}, ChangedMsg{})
+	m = step(m, key("l"))
+	if m.focus != focusList || m.openJID != "" {
+		t.Fatal("l in the chat list should not open a chat")
+	}
+	m = step(m, key("enter"), key("h"))
+	if m.focus != focusChat {
+		t.Fatal("h in messages should not go back to the chat list")
 	}
 }

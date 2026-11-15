@@ -33,6 +33,26 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.enterNormal()
 			return m, tmuxPane("-R")
+		case "ctrl+k":
+			switch {
+			case m.mode == modeInsert && m.input.mode == vimNormal:
+				m.enterNormal()
+				m.focus = focusChat
+				m.renderMessages(false)
+				return m, nil
+			case m.mode == modeNormal:
+				return m, tmuxPane("-U")
+			}
+		case "ctrl+j":
+			switch {
+			case m.mode == modeNormal && m.focus == focusChat && m.openJID != "":
+				m.enterCompose(vimNormal)
+				return m, nil
+			case m.mode == modeNormal:
+				return m, tmuxPane("-D")
+			case m.mode == modeInsert && m.input.mode == vimNormal:
+				return m, tmuxPane("-D")
+			}
 		}
 	}
 	switch m.mode {
@@ -187,7 +207,7 @@ func (m Model) listKey(key string) (tea.Model, tea.Cmd) {
 		m.cursor += m.listRows()
 	case "ctrl+b", "pgup":
 		m.cursor -= m.listRows()
-	case "enter", "l", "right", "o":
+	case "enter", "right", "o":
 		if c, ok := m.currentChat(); ok {
 			m.open(c.JID)
 			m.focus = focusChat
@@ -240,7 +260,7 @@ func (m Model) chatKey(key string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.focus = focusList
-	case "h", "left", "q":
+	case "left", "q":
 		m.focus = focusList
 	case "i", "a", "enter":
 		m.enterInsert()
@@ -248,28 +268,55 @@ func (m Model) chatKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+const longScrollStep = 3
+
 func (m *Model) moveSelection(delta int) {
 	if len(m.messages) == 0 {
 		return
 	}
-	m.sel = max(0, min(len(m.messages)-1, m.sel+delta))
+	if m.sel >= 0 && m.sel < len(m.spans) && (delta == 1 || delta == -1) {
+		start, end := m.spans[m.sel][0], m.spans[m.sel][1]
+		top, h := m.vp.YOffset, m.vp.Height
+		if delta == 1 && end >= top+h {
+			m.vp.SetYOffset(min(top+longScrollStep, end-h+1))
+			return
+		}
+		if delta == -1 && start < top {
+			m.vp.SetYOffset(max(top-longScrollStep, start))
+			return
+		}
+	}
+	next := max(0, min(len(m.messages)-1, m.sel+delta))
+	if next == m.sel {
+		return
+	}
+	m.sel = next
 	m.renderMessages(false)
-	m.revealSelection()
+	m.revealSelection(delta < 0)
 }
 
-func (m *Model) revealSelection() {
+func (m *Model) revealSelection(fromBelow ...bool) {
 	if m.sel < 0 || m.sel >= len(m.spans) {
 		return
 	}
 	start, end := m.spans[m.sel][0], m.spans[m.sel][1]
 	top, h := m.vp.YOffset, m.vp.Height
+	tall := end-start+1 > h
 	switch {
-	case end-start+1 > h || start < top:
+	case tall && len(fromBelow) > 0 && fromBelow[0]:
+		if end >= top+h || end < top {
+			m.vp.SetYOffset(end - h + 1)
+		}
+	case tall:
+		if end < top || start >= top+h {
+			m.vp.SetYOffset(start)
+		}
+	case start < top:
 		m.vp.SetYOffset(start)
 	case end >= top+h:
 		m.vp.SetYOffset(end - h + 1)
 	}
-	if m.sel == len(m.messages)-1 && end-start+1 <= h {
+	if m.sel == len(m.messages)-1 && !tall {
 		m.vp.GotoBottom()
 	}
 }
@@ -322,7 +369,7 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 		_, arg, _ := strings.Cut(cmd, " ")
 		arg = strings.TrimSpace(arg)
 		if arg == "" {
-			m.setFlash(fmt.Sprintf("images=%s image_width=%d image_height=%d", m.cfg.Images, m.cfg.ImageWidth, m.cfg.ImageHeight), false)
+			m.setFlash(fmt.Sprintf("images=%s image_width=%d image_height=%d collapse_lines=%d", m.cfg.Images, m.cfg.ImageWidth, m.cfg.ImageHeight, m.cfg.CollapseLines), false)
 			return m, nil
 		}
 		if err := m.cfg.Set(arg); err != nil {
