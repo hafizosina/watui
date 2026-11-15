@@ -274,6 +274,8 @@ func (c *Client) onMessage(ctx context.Context, e *events.Message, history bool)
 	}
 	c.check(c.Store.PutMessage(msg))
 	if !history && !e.Info.IsFromMe {
+		msg.MentionsMe = c.mentionsMe(ctx, ci.GetMentionedJID())
+		msg.RepliesMe = quoteSender != "" && quoteSender == c.ownJID().String()
 		c.mu.Lock()
 		fn := c.incoming
 		c.mu.Unlock()
@@ -656,4 +658,20 @@ func (c *Client) LeaveGroup(ctx context.Context, chatJID string) error {
 		return err
 	}
 	return c.WA.LeaveGroup(ctx, jid)
+}
+
+func (c *Client) mentionsMe(ctx context.Context, mentioned []string) bool {
+	own := c.ownJID()
+	ownLID := c.WA.Store.GetLID().ToNonAD()
+	for _, m := range mentioned {
+		jid, err := types.ParseJID(m)
+		if err != nil {
+			continue
+		}
+		jid = jid.ToNonAD()
+		if jid == own || (!ownLID.IsEmpty() && jid == ownLID) || c.normalize(ctx, jid) == own {
+			return true
+		}
+	}
+	return false
 }

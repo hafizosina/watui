@@ -496,3 +496,23 @@ func TestArchivedRow(t *testing.T) {
 	}
 	checkFrame(t, m.View(), 110, 34)
 }
+
+func TestViewProfileFromMessage(t *testing.T) {
+	m := step(testModel(t), tea.WindowSizeMsg{Width: 110, Height: 34}, ChangedMsg{})
+	m = step(m, key("j"), key("enter"), key(" "))
+	if m.menu == nil || !strings.Contains(strings.Join(labelsOf(m.menu.items), "|"), "View profile · +628111") {
+		t.Fatalf("a DM message menu should start with View profile, got %v", labelsOf(m.menu.items))
+	}
+	m = step(m, key("i"))
+	if m.info == nil || m.info.title != "+628111" {
+		t.Fatalf("i should open the person's profile, got %+v", m.info)
+	}
+	m = step(m, key("esc"), key("k"), key(" "))
+	if m.menu == nil || !strings.Contains(strings.Join(labelsOf(m.menu.items), "|"), "View my profile") {
+		t.Fatalf("own message should offer View my profile, got %v", labelsOf(m.menu.items))
+	}
+	m = step(m, key("esc"), key("q"), key("k"), key("enter"), key("k"), key("k"), key(" "))
+	if m.menu == nil || !strings.Contains(strings.Join(labelsOf(m.menu.items), "|"), "View profile · Sari") {
+		t.Fatalf("a group message should open the sender's profile, got %v", labelsOf(m.menu.items))
+	}
+}

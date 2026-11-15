@@ -103,7 +103,7 @@ Shown in the [3] box in place of the messages (`Esc` goes back), with the profil
 | Profile box → `Space` → **My profile**, or `:me` | your picture, name, number, about |
 | Chats → `Space` on a 1:1 chat → **Contact info** (`i`), or `:info` | picture, address-book name, WhatsApp name, number, about, business, groups in common |
 | Chats → `Space` on a group → **Group info** (`i`), or `:info` | picture, name, description, created date/by, settings, members (admins/owner marked) |
-| Messages → `Space` on someone's message in a group → **Sender info** | that person's details |
+| Messages → `Space` on any message → **View profile** (`i`) | the sender's details (your own message → My profile) |
 
 In group info: `j`/`k` move through members, `Enter` opens a chat with them, `Space` shows their details, `y` copies their number. In contact info, `Enter` opens the chat. No picture? A colored avatar with initials is shown instead.
 
@@ -126,6 +126,7 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 
 | Option | Key | Notes |
 |---|---|---|
+| View profile | `i` | who sent it (your own message → My profile) |
 | Expand / Collapse | `z` | only on long messages (folded after `collapse_lines`) |
 | Reply | `r` | the quote shows in the Compose title; `Esc` (in normal mode) cancels |
 | Edit | `e` | your own text messages, first 15 minutes |
@@ -180,7 +181,7 @@ notify_sound = watui   # watui (own chime; calls ring) | system | off | /path/to
 
 ### Desktop notifications
 
-New messages pop up via `notify-send` (one notification per chat, updated in place). Clicking it opens that chat in watui (switching profile if needed) and brings the tmux pane and kitty window to the front. No notification for muted or archived chats, for the chat you are reading while watui is focused, or for old messages arriving after a reconnect. `notify = private` shows only who wrote; `:set notify=off` mutes them for the session.
+New messages pop up via `notify-send` (one notification per chat, updated in place). Clicking it opens that chat in watui (switching profile if needed) and brings the tmux pane and kitty window to the front. No notification for muted or archived chats — except when someone **@mentions you** or **replies to your message** there (like on the phone: "@ Sari mentioned you · Backend Team"). Also none for the chat you are reading while watui is focused, or for old messages arriving after a reconnect. A profile with notifications turned off stays fully silent. `notify = private` shows only who wrote; `:set notify=off` mutes them for the session.
 
 Calls: watui can't answer calls (whatsmeow has no audio/video), but:
 

@@ -68,6 +68,24 @@ func TestNotificationRules(t *testing.T) {
 	if _, ok := m.noteFor(in("default", dm, dm, "Budi", "muted")); ok {
 		t.Error("muted chats must not notify")
 	}
+	if err := work.WA.Store.SetMutedUntil(group, store.MutedForever); err != nil {
+		t.Fatal(err)
+	}
+	quiet := in("work", group, "628222@s.whatsapp.net", "Sari", "lunch?")
+	if _, ok := m.noteFor(quiet); ok {
+		t.Error("a normal message in a muted group must not notify")
+	}
+	mention := in("work", group, "628222@s.whatsapp.net", "Sari", "@you can you check?")
+	mention.Msg.MentionsMe = true
+	if note, ok := m.noteFor(mention); !ok || note.Title != "[work] @ Sari mentioned you · BE Squad" {
+		t.Errorf("a mention in a muted group should notify, got ok=%v %+v", ok, note)
+	}
+	reply := in("work", group, "628222@s.whatsapp.net", "Sari", "agreed")
+	reply.Msg.RepliesMe = true
+	if note, ok := m.noteFor(reply); !ok || note.Title != "[work] ↩ Sari replied to you · BE Squad" {
+		t.Errorf("a reply to me in a muted group should notify, got ok=%v %+v", ok, note)
+	}
+	_ = work.WA.Store.SetMutedUntil(group, time.Time{})
 	_ = personal.WA.Store.SetMutedUntil(dm, time.Time{})
 
 	m = step(m, key("2"), key("j"), key("enter"))

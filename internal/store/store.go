@@ -55,6 +55,10 @@ type Message struct {
 	Forwarded   bool
 	Starred     bool
 	Reactions   map[string]string
+
+	// Set for live incoming messages only (not stored).
+	MentionsMe bool
+	RepliesMe  bool
 }
 
 type Store struct {

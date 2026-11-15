@@ -80,3 +80,15 @@ func TestCalls(t *testing.T) {
 		t.Fatalf("a call declined on the phone should be logged as declined, got %+v", msgs)
 	}
 }
+
+func TestMentionsMe(t *testing.T) {
+	c := testClient(t)
+	own := types.NewJID("6281200000001", types.DefaultUserServer)
+	c.WA.Store.ID = &types.JID{User: own.User, Device: 3, Server: types.DefaultUserServer}
+	if !c.mentionsMe(context.Background(), []string{"6289999@s.whatsapp.net", own.String()}) {
+		t.Error("own number in mentions should count")
+	}
+	if c.mentionsMe(context.Background(), []string{"6289999@s.whatsapp.net"}) {
+		t.Error("someone else's mention must not count")
+	}
+}

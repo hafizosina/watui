@@ -234,11 +234,6 @@ func (m *Model) openMessageMenu() {
 		return
 	}
 	var items []menuItem
-	if chat, _ := m.openChat(); chat.IsGroup && !msg.FromMe && msg.SenderJID != "" {
-		items = append(items, menuItem{label: "Sender info", key: "i", run: func(m *Model) tea.Cmd {
-			return m.personInfoCmd(msg.SenderJID, m.wa.ContactName(msg.SenderJID, msg.SenderName))
-		}})
-	}
 	if m.foldable[msg.ID] {
 		label := "Expand message"
 		if m.expanded[msg.ID] {
@@ -427,6 +422,24 @@ func (m *Model) openMessageMenu() {
 				}},
 			}}
 			return nil
+		}})
+	}
+	switch {
+	case msg.FromMe:
+		items = append(items, menuItem{label: "View my profile", key: "i", run: func(m *Model) tea.Cmd {
+			return m.myInfoCmd()
+		}})
+	default:
+		who := msg.SenderJID
+		if chat, _ := m.openChat(); !chat.IsGroup || who == "" {
+			who = m.openJID
+		}
+		name := m.wa.ContactName(who, msg.SenderName)
+		if chat, _ := m.openChat(); !chat.IsGroup {
+			name = m.names[m.openJID]
+		}
+		items = append(items, menuItem{label: "View profile · " + sanitize(name), key: "i", run: func(m *Model) tea.Cmd {
+			return m.personInfoCmd(who, name)
 		}})
 	}
 	if len(items) == 0 {

@@ -55,16 +55,26 @@ func (m Model) noteFor(in IncomingMsg) (notify.Note, bool) {
 		return notify.Note{}, false
 	}
 	chat, ok, err := p.WA.Store.Chat(in.Msg.ChatJID)
-	if err != nil || !ok || chat.Muted() || chat.Archived {
+	if err != nil || !ok {
+		return notify.Note{}, false
+	}
+	forMe := in.Msg.MentionsMe || in.Msg.RepliesMe
+	if (chat.Muted() || chat.Archived) && !forMe {
 		return notify.Note{}, false
 	}
 	if idx == m.active && m.focused && m.openJID == in.Msg.ChatJID {
 		return notify.Note{}, false
 	}
 	chatName := sanitize(p.WA.ChatName(chat))
+	sender := sanitize(p.WA.ContactName(in.Msg.SenderJID, in.Msg.SenderName))
 	title := chatName
-	if chat.IsGroup {
-		title = sanitize(p.WA.ContactName(in.Msg.SenderJID, in.Msg.SenderName)) + " @ " + chatName
+	switch {
+	case in.Msg.MentionsMe:
+		title = "@ " + sender + " mentioned you · " + chatName
+	case in.Msg.RepliesMe && chat.IsGroup:
+		title = "↩ " + sender + " replied to you · " + chatName
+	case chat.IsGroup:
+		title = sender + " @ " + chatName
 	}
 	if len(m.profiles) > 1 {
 		title = "[" + p.Label() + "] " + title
