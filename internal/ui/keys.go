@@ -382,6 +382,27 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 		m.renderMessages(false)
 		m.setFlash("set "+arg+" (for this session — edit ~/.config/watui/config to keep it)", false)
 		return m, nil
+	case "pause", "stop", "speed":
+		if m.player == nil {
+			return m, nil
+		}
+		if _, playing := m.player.State(); !playing {
+			m.setFlash("nothing is playing", true)
+			return m, nil
+		}
+		switch name {
+		case "pause":
+			return m, errCmd(m.player.TogglePause())
+		case "stop":
+			m.player.Stop()
+			return m, nil
+		}
+		speed, err := m.player.CycleSpeed()
+		if err != nil {
+			return m, errCmd(err)
+		}
+		m.setFlash(fmt.Sprintf("speed %.1g×", speed), false)
+		return m, nil
 	case "archived":
 		m.showArchived = !m.showArchived
 		m.cursor = 0

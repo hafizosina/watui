@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 
 	"github.com/zhenzhu/watui/internal/config"
 	"github.com/zhenzhu/watui/internal/media"
+	"github.com/zhenzhu/watui/internal/player"
 	"github.com/zhenzhu/watui/internal/store"
 	"github.com/zhenzhu/watui/internal/ui"
 	"github.com/zhenzhu/watui/internal/wa"
@@ -85,8 +87,17 @@ type app struct {
 	close  func()
 }
 
+func execOutput(name string, args ...string) (string, error) {
+	out, err := exec.Command(name, args...).Output()
+	return string(out), err
+}
+
 func open() (*app, error) {
 	dir, err := dataDir()
+	if err != nil {
+		return nil, err
+	}
+	lock, err := lockOrTakeOver(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +144,7 @@ func open() (*app, error) {
 			_ = db.Close()
 			_ = container.Close()
 			_ = logFile.Close()
+			lock.release()
 		},
 	}, nil
 }
@@ -206,7 +218,10 @@ func run(forceLogin bool) error {
 		defer images.Close()
 	}
 
-	p := tea.NewProgram(ui.New(client, cfg, images), tea.WithAltScreen(), tea.WithReportFocus())
+	pl := player.New(client.Notify)
+	defer pl.Stop()
+
+	p := tea.NewProgram(ui.New(client, cfg, images, pl), tea.WithAltScreen(), tea.WithReportFocus())
 	go func() {
 		for range client.Changed() {
 			time.Sleep(150 * time.Millisecond)

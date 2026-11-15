@@ -13,6 +13,7 @@ import (
 
 	"github.com/zhenzhu/watui/internal/config"
 	"github.com/zhenzhu/watui/internal/media"
+	"github.com/zhenzhu/watui/internal/player"
 	"github.com/zhenzhu/watui/internal/store"
 	"github.com/zhenzhu/watui/internal/wa"
 )
@@ -65,6 +66,7 @@ type Model struct {
 	wa     *wa.Client
 	cfg    config.Config
 	images *media.Manager
+	player *player.Player
 
 	width, height int
 	mode          mode
@@ -102,7 +104,7 @@ type Model struct {
 	flashUntil time.Time
 }
 
-func New(client *wa.Client, cfg config.Config, images *media.Manager) Model {
+func New(client *wa.Client, cfg config.Config, images *media.Manager, pl *player.Player) Model {
 	in := newEditor()
 
 	pr := textinput.New()
@@ -113,6 +115,7 @@ func New(client *wa.Client, cfg config.Config, images *media.Manager) Model {
 		wa:          client,
 		cfg:         cfg,
 		images:      images,
+		player:      pl,
 		focused:     true,
 		names:       map[string]string{},
 		forceShow:   map[string]bool{},
@@ -133,7 +136,7 @@ func (m Model) Init() tea.Cmd {
 func reload() tea.Msg { return ChangedMsg{} }
 
 func tick() tea.Cmd {
-	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
 func (m *Model) setFlash(text string, isErr bool) {
@@ -162,6 +165,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refresh()
 		return m, m.markReadCmd()
 	case tickMsg:
+		if m.player != nil {
+			if _, playing := m.player.State(); playing {
+				m.renderMessages(false)
+			}
+		}
 		return m, tick()
 	case actionDoneMsg:
 		if msg.err != nil {

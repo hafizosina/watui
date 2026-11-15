@@ -63,7 +63,7 @@ func testModel(t *testing.T) Model {
 		t.Fatal(err)
 	}
 	client := wa.New(whatsmeow.NewClient(device, waLog.Noop), st, waLog.Noop)
-	return New(client, config.Default(), nil)
+	return New(client, config.Default(), nil, nil)
 }
 
 func step(m Model, msgs ...tea.Msg) Model {
@@ -286,5 +286,41 @@ func TestHLDoNotSwitchBoxes(t *testing.T) {
 	m = step(m, key("enter"), key("h"))
 	if m.focus != focusChat {
 		t.Fatal("h in messages should not go back to the chat list")
+	}
+}
+
+func TestMediaLabels(t *testing.T) {
+	m := testModel(t)
+	chat := "628111@s.whatsapp.net"
+	put := func(id, kind, text string, sec int) {
+		if err := m.wa.Store.PutMessage(store.Message{ChatJID: chat, ID: id, SenderJID: chat, TS: time.Now().Add(time.Duration(sec) * time.Second), Text: text, Status: store.StatusSent, Read: true, MediaType: kind, Media: []byte{}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("VID", wa.MediaVideo, "[video 0:42 · 3.1 MB] lihat ini", 1)
+	put("VN", wa.MediaAudio, "[voice note 0:12]", 2)
+	m = step(m, tea.WindowSizeMsg{Width: 110, Height: 40}, ChangedMsg{})
+	m = step(m, key("j"), key("enter"))
+	view := m.vp.View()
+	for _, want := range []string{"▷ voice note 0:12", "space → Play"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("view should contain %q", want)
+		}
+	}
+	m = step(m, key(" "))
+	labels := ""
+	for _, it := range m.menu.items {
+		labels += it.label + "|"
+	}
+	if !strings.Contains(labels, "Save to ~/Downloads/WhatsApp") {
+		t.Errorf("voice note menu should offer Save, got %s", labels)
+	}
+	m = step(m, key("esc"), key("k"), key(" "))
+	labels = ""
+	for _, it := range m.menu.items {
+		labels += it.label + "|"
+	}
+	if !strings.Contains(labels, "Play video") {
+		t.Errorf("video menu should offer Play video, got %s", labels)
 	}
 }

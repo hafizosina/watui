@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/zhenzhu/watui/internal/media"
+	"github.com/zhenzhu/watui/internal/player"
 	"github.com/zhenzhu/watui/internal/store"
 	"github.com/zhenzhu/watui/internal/wa"
 )
@@ -236,7 +237,70 @@ func (m *Model) openMessageMenu() {
 			return nil
 		}})
 	}
-	if msg.MediaType != "" && !msg.Deleted && m.images != nil {
+	if msg.MediaType == wa.MediaVideo && !msg.Deleted {
+		items = append(items, menuItem{label: "Play video", key: "o", run: func(m *Model) tea.Cmd {
+			m.setFlash("downloading video…", false)
+			client := m.wa
+			return m.actionCmd("", func(ctx context.Context) error {
+				path, _, err := client.MediaFile(ctx, msg.ChatJID, msg.ID)
+				if err != nil {
+					return err
+				}
+				return player.OpenVideo(path, client.IsGIF(msg.ChatJID, msg.ID))
+			})
+		}})
+	}
+	if msg.MediaType == wa.MediaAudio && !msg.Deleted && m.player != nil {
+		st, playing := m.player.State()
+		if playing && st.MsgID == msg.ID {
+			label := "Pause"
+			if st.Paused {
+				label = "Resume"
+			}
+			items = append(items,
+				menuItem{label: label, key: "o", run: func(m *Model) tea.Cmd {
+					return errCmd(m.player.TogglePause())
+				}},
+				menuItem{label: fmt.Sprintf("Speed (now %.1g×)", st.Speed), key: ".", run: func(m *Model) tea.Cmd {
+					_, err := m.player.CycleSpeed()
+					return errCmd(err)
+				}},
+				menuItem{label: "Stop", key: "x", run: func(m *Model) tea.Cmd {
+					m.player.Stop()
+					return nil
+				}},
+			)
+		} else {
+			items = append(items, menuItem{label: "Play", key: "o", run: func(m *Model) tea.Cmd {
+				m.setFlash("downloading…", false)
+				client, pl := m.wa, m.player
+				return m.actionCmd("", func(ctx context.Context) error {
+					path, _, err := client.MediaFile(ctx, msg.ChatJID, msg.ID)
+					if err != nil {
+						return err
+					}
+					secs := client.MediaSeconds(msg.ChatJID, msg.ID)
+					return pl.PlayAudio(msg.ID, path, time.Duration(secs)*time.Second)
+				})
+			}})
+		}
+	}
+	if msg.MediaType != "" && !msg.Deleted {
+		items = append(items, menuItem{label: "Save to ~/Downloads/WhatsApp", key: "S", run: func(m *Model) tea.Cmd {
+			client := m.wa
+			when := msg.TS.Local().Format("20060102-150405")
+			return func() tea.Msg {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				path, err := client.SaveMedia(ctx, msg.ChatJID, msg.ID, when)
+				if err != nil {
+					return actionDoneMsg{err: err}
+				}
+				return actionDoneMsg{info: "saved " + path}
+			}
+		}})
+	}
+	if (msg.MediaType == wa.MediaImage || msg.MediaType == wa.MediaSticker || msg.MediaType == wa.MediaVideo) && !msg.Deleted && m.images != nil {
 		q, shown := m.shownImages[msg.ID]
 		if shown && q == media.Full {
 			items = append(items, menuItem{label: "Hide image", key: "v", run: func(m *Model) tea.Cmd {
@@ -254,21 +318,21 @@ func (m *Model) openMessageMenu() {
 				return nil
 			}})
 		}
-		if path := m.images.Path(msg.ID); path != "" {
+		if path := m.images.Path(msg.ID); path != "" && (msg.MediaType == wa.MediaImage || msg.MediaType == wa.MediaSticker) {
 			items = append(items, menuItem{label: "Open image in viewer", key: "o", run: func(m *Model) tea.Cmd {
 				return runDetached("xdg-open", path)
 			}})
 		}
 	}
 	if msg.MediaType == "" && !msg.Deleted && isMediaText(msg.Text) {
-		items = append(items, menuItem{label: "Image not available", key: "v", run: func(m *Model) tea.Cmd {
-			m.setFlash("Saved before watui kept pictures. To get it: quit, run `watui logout`, then `watui` and scan the QR.", true)
+		items = append(items, menuItem{label: "Media not available (old message)", key: "v", run: func(m *Model) tea.Cmd {
+			m.setFlash("Saved before watui kept media info. To get it: quit, run `watui logout`, then `watui` and scan the QR.", true)
 			return nil
 		}})
 	}
 	if !msg.Deleted && msg.Text != "" {
 		items = append(items, menuItem{label: "Copy text", key: "y", run: func(m *Model) tea.Cmd {
-			return copyCmd(captionOf(msg))
+			return copyCmd(plainText(msg))
 		}})
 	}
 	if wa.CanForward(msg) {
@@ -364,8 +428,25 @@ func (m *Model) actionCmd(done string, fn func(ctx context.Context) error) tea.C
 	}
 }
 
+func errCmd(err error) tea.Cmd {
+	if err == nil {
+		return nil
+	}
+	return func() tea.Msg { return actionDoneMsg{err: err} }
+}
+
+func plainText(msg store.Message) string {
+	text := sanitize(msg.Text)
+	if msg.MediaType != "" && strings.HasPrefix(text, "[") {
+		if _, rest, ok := strings.Cut(text, "]"); ok {
+			return strings.TrimSpace(rest)
+		}
+	}
+	return text
+}
+
 func isMediaText(text string) bool {
-	for _, tag := range []string{"[image]", "[sticker]", "[video]", "[gif]"} {
+	for _, tag := range []string{"[image]", "[sticker]", "[video", "[gif]", "[voice note", "[audio"} {
 		if strings.HasPrefix(text, tag) {
 			return true
 		}

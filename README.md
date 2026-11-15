@@ -73,6 +73,11 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 | Reply | `r` | the quote shows in the Compose title; `Esc` (in normal mode) cancels |
 | Edit | `e` | your own text messages, first 15 minutes |
 | React | `+` | 👍 ❤️ 😂 😮 😢 🙏 🔥 🎉, or remove yours |
+| Play video | `o` | downloads once, opens in an mpv window (GIFs loop); Celluloid/xdg-open if no mpv |
+| Play / Pause voice note | `o` | plays in the background with mpv; progress bar on the message and in the status box |
+| Speed | `.` | 1× → 1.5× → 2× while a voice note plays |
+| Stop | `x` | stop the voice note |
+| Save to ~/Downloads/WhatsApp | `S` | pictures, videos, voice notes, stickers |
 | Show / Hide image | `v` | shows pictures that are hidden (older than the newest 40, or `images=off`/`thumbnail`) |
 | Open image in viewer | `o` | opens the downloaded picture with `xdg-open` |
 | Copy text | `y` | via `xclip` |
@@ -81,7 +86,7 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 | Pin | `p` | 24 hours, 7 days or 30 days, or unpin |
 | Delete for everyone | `d` | your own messages, first 2 days; asks first |
 
-Commands: `:pin` `:unpin` `:mute` `:unmute` `:archive` `:unarchive` `:archived` `:read` `:q`
+Commands: `:pause` `:speed` `:stop` (playing voice note), `:pin` `:unpin` `:mute` `:unmute` `:archive` `:unarchive` `:archived` `:read` `:q`
 
 ## Settings
 
@@ -120,7 +125,9 @@ Downloaded pictures are cached in `~/.cache/watui/images/` (safe to delete).
 
 ## Not supported yet
 
-Sending new images or files, video playback, animated stickers, voice/video calls, desktop notifications, showing which message is pinned.
+Sending new images, files or voice notes, playing video inside the terminal, animated stickers, voice/video calls, desktop notifications, showing which message is pinned.
+
+Video and voice notes need `mpv` (and `ffmpeg` for grabbing a sharp video frame): `sudo apt install mpv ffmpeg`.
 
 ## Keep it updated
 
@@ -156,4 +163,4 @@ Two commands:
 | `watui` | the deployed build in `~/App/WaTui` (update it with `make deploy`) |
 | `watuidev` | the code in this folder, rebuilt on every start (script in `~/.local/bin/watuidev`) |
 
-Both use the same login and chats (`~/.local/share/watui`), so don't run them at the same time: WhatsApp drops one of them.
+Both use the same login and chats (`~/.local/share/watui`), so only one can run at a time. If one is already open, starting another shows where it is running (process, terminal, tmux window) and asks whether to close it and open here: it is asked to quit cleanly first, and forced after 5 seconds.

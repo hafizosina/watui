@@ -127,6 +127,15 @@ func (m Model) statusView() string {
 		}
 	}
 	line := " " + conn
+	if m.player != nil {
+		if st, ok := m.player.State(); ok {
+			icon := "▶"
+			if st.Paused {
+				icon = "⏸"
+			}
+			line += styleDim.Render(" · ") + lipgloss.NewStyle().Foreground(colGreen).Render(icon+" "+clock(st.Position)+"/"+clock(st.Duration))
+		}
+	}
 	if me := m.wa.Me(); me != "" {
 		line += styleDim.Render(" · ") + styleText.Render(me)
 	}
@@ -436,7 +445,13 @@ func (m Model) imageSet(w int) map[string]media.Quality {
 		if msg.MediaType == "" || msg.Deleted || m.forceHide[msg.ID] {
 			continue
 		}
+		if msg.MediaType == wa.MediaAudio {
+			continue
+		}
 		q := m.imageQuality()
+		if msg.MediaType == wa.MediaVideo {
+			q = media.Thumbnail
+		}
 		switch {
 		case m.forceShow[msg.ID]:
 			q = media.Full
@@ -456,6 +471,9 @@ func (m Model) renderBody(msg store.Message, w int, showImage bool, q media.Qual
 		return "   " + styleDeleted.Render("message deleted")
 	}
 	text := sanitize(msg.Text)
+	if msg.MediaType == wa.MediaAudio {
+		return m.audioLine(msg, text) + m.suffix(msg)
+	}
 	var picture []string
 	if showImage {
 		lines, status, ok := m.images.Lines(msg.ID, q)
@@ -479,12 +497,51 @@ func (m Model) renderBody(msg store.Message, w int, showImage bool, q media.Qual
 	return strings.Join(picture, "\n") + "\n" + body
 }
 
+func (m Model) audioLine(msg store.Message, text string) string {
+	label := strings.Trim(strings.SplitN(text, "]", 2)[0], "[")
+	if m.player != nil {
+		if st, ok := m.player.State(); ok && st.MsgID == msg.ID {
+			icon := "▶"
+			if st.Paused {
+				icon = "⏸"
+			}
+			const barW = 24
+			done := 0
+			if st.Duration > 0 {
+				done = int(float64(barW) * float64(st.Position) / float64(st.Duration))
+			}
+			done = max(0, min(barW-1, done))
+			bar := lipgloss.NewStyle().Foreground(colGreen).Render(strings.Repeat("━", done)+"●") + styleDim.Render(strings.Repeat("─", barW-done-1))
+			speed := ""
+			if st.Speed != 1 {
+				speed = styleKey.Render(fmt.Sprintf(" %.1g×", st.Speed))
+			}
+			return "   " + lipgloss.NewStyle().Foreground(colGreen).Bold(true).Render(icon) + " " + bar + " " +
+				styleText.Render(clock(st.Position)+" / "+clock(st.Duration)) + speed
+		}
+	}
+	return "   " + styleKey.Render("▷ ") + styleText.Render(label) + styleDim.Render("  · space → Play")
+}
+
+func clock(d time.Duration) string {
+	s := int(d.Seconds())
+	return fmt.Sprintf("%d:%02d", s/60, s%60)
+}
+
 func captionOf(msg store.Message) string {
 	text := sanitize(msg.Text)
-	for _, tag := range []string{"[image]", "[sticker]", "[gif]"} {
+	for _, tag := range []string{"[image]", "[sticker]"} {
 		if strings.HasPrefix(text, tag) {
 			return strings.TrimSpace(strings.TrimPrefix(text, tag))
 		}
+	}
+	if msg.MediaType == wa.MediaVideo && strings.HasPrefix(text, "[") {
+		label, caption, _ := strings.Cut(strings.TrimPrefix(text, "["), "]")
+		out := styleKey.Render("▶ "+label) + styleDim.Render("  · space → Play")
+		if caption = strings.TrimSpace(caption); caption != "" {
+			out += "\n" + caption
+		}
+		return out
 	}
 	return text
 }
@@ -619,7 +676,8 @@ func helpView(w int) string {
 		{"enter", "pick option (or press its letter)"},
 		{"esc", "close"},
 		{"options", "expand/collapse z · reply r · edit e · react + · show/hide image v"},
-		{" ", "open image o · copy y · forward f · star s · pin p · delete d"},
+		{" ", "play/pause o · speed . · stop x · save S · open image o"},
+		{" ", "copy y · forward f · star s · pin p · delete d"},
 		{"", ""},
 		{"", "Global"},
 		{"1 / 2 / 3", "focus chats / messages / compose"},
@@ -650,6 +708,7 @@ func helpView(w int) string {
 		{":set images=off", "always | thumbnail | off"},
 		{":set", "show settings"},
 		{":read", "mark chat read"},
+		{":pause :speed :stop", "control the playing voice note"},
 		{":q", "quit"},
 	}
 	var b strings.Builder

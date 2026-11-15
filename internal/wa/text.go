@@ -19,17 +19,18 @@ func messageText(m *waE2E.Message) string {
 	case m.GetImageMessage() != nil:
 		return withCaption("[image]", m.GetImageMessage().GetCaption())
 	case m.GetVideoMessage() != nil:
-		if m.GetVideoMessage().GetGifPlayback() {
-			return withCaption("[gif]", m.GetVideoMessage().GetCaption())
+		v := m.GetVideoMessage()
+		if v.GetGifPlayback() {
+			return withCaption("[gif]", v.GetCaption())
 		}
-		return withCaption("[video]", m.GetVideoMessage().GetCaption())
+		return withCaption("[video "+Duration(v.GetSeconds())+" · "+Size(v.GetFileLength())+"]", v.GetCaption())
 	case m.GetPtvMessage() != nil:
-		return "[video note]"
+		return "[video note " + Duration(m.GetPtvMessage().GetSeconds()) + "]"
 	case m.GetAudioMessage() != nil:
 		if m.GetAudioMessage().GetPTT() {
-			return fmt.Sprintf("[voice note %ds]", m.GetAudioMessage().GetSeconds())
+			return "[voice note " + Duration(m.GetAudioMessage().GetSeconds()) + "]"
 		}
-		return "[audio]"
+		return "[audio " + Duration(m.GetAudioMessage().GetSeconds()) + "]"
 	case m.GetDocumentMessage() != nil:
 		return withCaption("[document: "+m.GetDocumentMessage().GetFileName()+"]", m.GetDocumentMessage().GetCaption())
 	case m.GetStickerMessage() != nil:
@@ -77,4 +78,20 @@ func withCaption(tag, caption string) string {
 		return tag
 	}
 	return tag + " " + caption
+}
+
+func Duration(seconds uint32) string {
+	return fmt.Sprintf("%d:%02d", seconds/60, seconds%60)
+}
+
+func Size(bytes uint64) string {
+	switch {
+	case bytes >= 1<<30:
+		return fmt.Sprintf("%.1f GB", float64(bytes)/(1<<30))
+	case bytes >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/(1<<20))
+	case bytes >= 1<<10:
+		return fmt.Sprintf("%d KB", bytes>>10)
+	}
+	return fmt.Sprintf("%d B", bytes)
 }

@@ -42,6 +42,29 @@ func (c *Client) ownJID() types.JID {
 	return c.WA.Store.GetJID().ToNonAD()
 }
 
+func (c *Client) MediaSeconds(chatJID, msgID string) uint32 {
+	_, msg, err := c.mediaMessage(chatJID, msgID)
+	if err != nil {
+		return 0
+	}
+	switch m := msg.(type) {
+	case *waE2E.AudioMessage:
+		return m.GetSeconds()
+	case *waE2E.VideoMessage:
+		return m.GetSeconds()
+	}
+	return 0
+}
+
+func (c *Client) IsGIF(chatJID, msgID string) bool {
+	_, msg, err := c.mediaMessage(chatJID, msgID)
+	if err != nil {
+		return false
+	}
+	v, ok := msg.(*waE2E.VideoMessage)
+	return ok && v.GetGifPlayback()
+}
+
 func (c *Client) OwnJID() string {
 	return c.ownJID().String()
 }
@@ -222,6 +245,13 @@ func (c *Client) Forward(ctx context.Context, m store.Message, toChatJID string)
 		}
 		vid.ContextInfo = fwd
 		content.VideoMessage = &vid
+	case MediaAudio:
+		var au waE2E.AudioMessage
+		if err := proto.Unmarshal(data, &au); err != nil {
+			return err
+		}
+		au.ContextInfo = fwd
+		content.AudioMessage = &au
 	case MediaSticker:
 		var st waE2E.StickerMessage
 		if err := proto.Unmarshal(data, &st); err != nil {
