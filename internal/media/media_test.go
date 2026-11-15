@@ -19,10 +19,10 @@ func TestPipeline(t *testing.T) {
 	}
 	done := make(chan struct{}, 1)
 	m := &Manager{
-		load: func(ctx context.Context, chat, id string, q Quality) (image.Image, error) {
+		load: func(ctx context.Context, chat, id string, q Quality) ([]Frame, error) {
 			img := image.NewRGBA(image.Rect(0, 0, 1600, 1200))
 			img.Set(10, 10, color.RGBA{R: 255, A: 255})
-			return img, nil
+			return []Frame{{Img: img}}, nil
 		},
 		notify:   func() { done <- struct{}{} },
 		cacheDir: t.TempDir(),
@@ -79,5 +79,52 @@ func TestFit(t *testing.T) {
 		if cols != c.cols || rows != c.rows {
 			t.Errorf("fit(%d,%d) = %dx%d, want %dx%d", c.w, c.h, cols, rows, c.cols, c.rows)
 		}
+	}
+}
+
+func TestAnimation(t *testing.T) {
+	out, err := os.CreateTemp(t.TempDir(), "tty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{}, 1)
+	m := &Manager{
+		load: func(ctx context.Context, chat, id string, q Quality) ([]Frame, error) {
+			var frames []Frame
+			for i := 0; i < 3; i++ {
+				img := image.NewRGBA(image.Rect(0, 0, 200, 200))
+				img.Set(i, i, color.RGBA{G: 255, A: 255})
+				frames = append(frames, Frame{Img: img, Delay: 150 * time.Millisecond})
+			}
+			return frames, nil
+		},
+		notify:   func() { done <- struct{}{} },
+		cacheDir: t.TempDir(),
+		tty:      out,
+		sem:      make(chan struct{}, 1),
+		entries:  map[string]*entry{},
+		nextID:   99,
+	}
+	m.Request("chat", "ANIM", Full, Box{MaxCols: 20, MaxRows: 10})
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("animation never loaded")
+	}
+	if lines, status, _ := m.Lines("ANIM", Full); len(lines) == 0 {
+		t.Fatalf("animation should render placeholders, status %q", status)
+	}
+	written, _ := os.ReadFile(out.Name())
+	seq := string(written)
+	if strings.Count(seq, "a=f") != 2 {
+		t.Errorf("2 extra frames should be sent with a=f, got %d", strings.Count(seq, "a=f"))
+	}
+	for _, want := range []string{"a=T", "z=150", "s=3", "v=1"} {
+		if !strings.Contains(seq, want) {
+			t.Errorf("kitty commands missing %q", want)
+		}
+	}
+	if c, ok := m.readCache("ANIM", Full); !ok || len(c.paths) != 3 {
+		t.Fatal("frames should be cached for next time")
 	}
 }

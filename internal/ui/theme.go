@@ -52,6 +52,7 @@ var (
 	styleInfo       = lipgloss.NewStyle().Foreground(colFgDark)
 	styleStatusBar  = lipgloss.NewStyle().Background(colBgDark).Foreground(colFgDark)
 	styleKey        = lipgloss.NewStyle().Foreground(colBlue).Bold(true)
+	styleMuted      = lipgloss.NewStyle().Foreground(colOrange).Bold(true)
 )
 
 func modeStyle(m mode) lipgloss.Style {

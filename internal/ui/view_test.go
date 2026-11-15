@@ -410,3 +410,55 @@ func TestProfiles(t *testing.T) {
 		t.Log("\n" + m.View())
 	}
 }
+
+func TestChatMenu(t *testing.T) {
+	m := step(testModel(t), tea.WindowSizeMsg{Width: 110, Height: 34}, ChangedMsg{})
+	m = step(m, key(" "))
+	if m.menu == nil || m.menu.title != "Group · BE Squad" {
+		t.Fatalf("space on a group should open the group menu, got %+v", m.menu)
+	}
+	labels := strings.Join(labelsOf(m.menu.items), "|")
+	for _, want := range []string{"Open", "Unpin", "Mute…", "Archive", "Mark as read", "Leave group", "Delete chat"} {
+		if !strings.Contains(labels, want) {
+			t.Errorf("group menu should have %q, got %s", want, labels)
+		}
+	}
+	m = step(m, key("m"))
+	if m.menu == nil || len(m.menu.items) != 3 {
+		t.Fatal("Mute… should offer 8 hours / 1 week / Always")
+	}
+	m = step(m, key("esc"), key("j"), key(" "))
+	labels = strings.Join(labelsOf(m.menu.items), "|")
+	if !strings.Contains(labels, "Copy number +628111") || strings.Contains(labels, "Leave group") {
+		t.Errorf("DM menu should copy the number and not offer Leave, got %s", labels)
+	}
+	m = step(m, key("d"))
+	if m.menu == nil || !strings.HasPrefix(m.menu.title, "Delete chat with") || m.menu.items[0].label != "Cancel" {
+		t.Fatal("Delete should ask to confirm, with Cancel first")
+	}
+	m = step(m, key("n"))
+	if m.menu != nil || len(m.chats) != 2 {
+		t.Fatal("cancel must not delete anything")
+	}
+	m = step(m, key(" "), key("o"))
+	if m.openJID != "628111@s.whatsapp.net" || m.focus != focusChat {
+		t.Fatal("Open should open the chat")
+	}
+	checkFrame(t, m.View(), 110, 34)
+}
+
+func TestMuteIcons(t *testing.T) {
+	m := testModel(t)
+	if err := m.wa.Store.SetMutedUntil("1203630@g.us", store.MutedForever); err != nil {
+		t.Fatal(err)
+	}
+	m = step(m, tea.WindowSizeMsg{Width: 110, Height: 34}, ChangedMsg{}, key("enter"))
+	frame := m.View()
+	checkFrame(t, frame, 110, 34)
+	if strings.Count(frame, iconMute) < 2 {
+		t.Error("muted chat should show the mute icon in the chat list and the messages title")
+	}
+	if !strings.Contains(frame, iconMute+" muted") {
+		t.Error("messages title should say muted next to the icon")
+	}
+}

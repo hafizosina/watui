@@ -23,7 +23,17 @@ type Config struct {
 	ImageHeight int
 
 	CollapseLines int
+
+	Notify NotifyMode
 }
+
+type NotifyMode string
+
+const (
+	NotifyOn      NotifyMode = "on"
+	NotifyPrivate NotifyMode = "private"
+	NotifyOff     NotifyMode = "off"
+)
 
 func Default() Config {
 	return Config{
@@ -32,6 +42,8 @@ func Default() Config {
 		ImageHeight: 15,
 
 		CollapseLines: 15,
+
+		Notify: NotifyOn,
 	}
 }
 
@@ -49,6 +61,12 @@ image_height = 15
 
 # Long messages show only this many lines until you expand them (Space → Expand). 0 = never fold.
 collapse_lines = 15
+
+# Desktop notifications for new messages:
+#   on       sender + message text
+#   private  sender only ("New message"), no text on screen
+#   off      none
+notify = on
 `
 
 func Path() (string, error) {
@@ -122,6 +140,12 @@ func (c *Config) Set(assignment string) error {
 			return fmt.Errorf("image_height must be a number >= 2, got %q", value)
 		}
 		c.ImageHeight = n
+	case "notify":
+		mode := NotifyMode(value)
+		if mode != NotifyOn && mode != NotifyPrivate && mode != NotifyOff {
+			return fmt.Errorf("notify must be on, private or off, got %q", value)
+		}
+		c.Notify = mode
 	case "collapse_lines":
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 0 {

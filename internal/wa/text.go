@@ -32,7 +32,12 @@ func messageText(m *waE2E.Message) string {
 		}
 		return "[audio " + Duration(m.GetAudioMessage().GetSeconds()) + "]"
 	case m.GetDocumentMessage() != nil:
-		return withCaption("[document: "+m.GetDocumentMessage().GetFileName()+"]", m.GetDocumentMessage().GetCaption())
+		d := m.GetDocumentMessage()
+		name := d.GetFileName()
+		if name == "" {
+			name = d.GetTitle()
+		}
+		return withCaption("[document: "+name+" · "+Size(d.GetFileLength())+"]", d.GetCaption())
 	case m.GetStickerMessage() != nil:
 		return "[sticker]"
 	case m.GetLocationMessage() != nil:

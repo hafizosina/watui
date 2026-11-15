@@ -46,6 +46,8 @@ func (m Model) View() string {
 	var right string
 	if m.showHelp {
 		right = panel("Keybindings", "any key to close", helpView(chatW-2), chatW, mainH, true)
+	} else if m.info != nil {
+		right = panel(m.infoTitle(), m.infoFooter(), m.infoView(chatW-2, mainH-2), chatW, mainH, m.mode == modeNormal && m.focus == focusChat)
 	} else {
 		right = lipgloss.JoinVertical(lipgloss.Left,
 			panel(m.messagesTitle(), m.messagesFooter(), m.messagesView(chatW-2, msgsH-2), chatW, msgsH, m.mode != modeInsert && m.focus == focusChat),
@@ -128,11 +130,11 @@ func (m Model) messagesTitle() string {
 	if chat.IsGroup {
 		title += " · group"
 	}
-	if chat.Muted() {
-		title += " · muted"
-	}
 	if chat.Archived {
 		title += " · archived"
+	}
+	if chat.Muted() {
+		title += " " + styleMuted.Render(iconMute+" muted")
 	}
 	return title
 }
@@ -230,7 +232,14 @@ func (m Model) chatRow(c store.Chat, selected bool, w int) string {
 		nameStyle = styleUnreadName
 	}
 	gap1 := max(0, w-2-lipgloss.Width(name)-lipgloss.Width(icons)-lipgloss.Width(when))
-	line1 := paint(lipgloss.NewStyle(), " ") + paint(nameStyle, name) + paint(styleDim, icons) +
+	pinIcon, muteIcon := "", ""
+	if c.Pinned {
+		pinIcon = " " + iconPin
+	}
+	if c.Muted() {
+		muteIcon = " " + iconMute
+	}
+	line1 := paint(lipgloss.NewStyle(), " ") + paint(nameStyle, name) + paint(styleDim, pinIcon) + paint(styleMuted, muteIcon) +
 		paint(lipgloss.NewStyle(), strings.Repeat(" ", gap1)) + paint(styleDim, when) + paint(lipgloss.NewStyle(), " ")
 
 	badge := ""
@@ -405,7 +414,7 @@ func (m Model) imageSet(w int) map[string]media.Quality {
 			continue
 		}
 		q := m.imageQuality()
-		if msg.MediaType == wa.MediaVideo {
+		if msg.MediaType == wa.MediaVideo && !strings.HasPrefix(msg.Text, "[gif]") {
 			q = media.Thumbnail
 		}
 		switch {
@@ -429,6 +438,13 @@ func (m Model) renderBody(msg store.Message, w int, showImage bool, q media.Qual
 	text := sanitize(msg.Text)
 	if msg.MediaType == wa.MediaAudio {
 		return m.audioLine(msg, text) + m.suffix(msg)
+	}
+	if msg.MediaType == wa.MediaDoc {
+		return m.documentLines(msg, text, w)
+	}
+	if strings.HasPrefix(text, "[missed ") && strings.HasSuffix(text, " call]") {
+		label := strings.TrimSuffix(strings.TrimPrefix(text, "[missed "), "]")
+		return "   " + lipgloss.NewStyle().Foreground(colRed).Render(iconPhone+" Missed "+label)
 	}
 	var picture []string
 	if showImage {
@@ -477,6 +493,20 @@ func (m Model) audioLine(msg store.Message, text string) string {
 		}
 	}
 	return "   " + styleKey.Render("▷ ") + styleText.Render(label) + styleDim.Render("  · space → Play")
+}
+
+func (m Model) documentLines(msg store.Message, text string, w int) string {
+	label, caption := text, ""
+	if strings.HasPrefix(text, "[document:") {
+		label, caption, _ = strings.Cut(strings.TrimPrefix(text, "[document:"), "]")
+		label = strings.TrimSpace(label)
+	}
+	line := "   " + styleKey.Render(iconFile+" ") + styleText.Bold(true).Render(ansi.Truncate(label, max(10, w-24), "…")) +
+		styleDim.Render("  · space → Open") + m.suffix(msg)
+	if caption = strings.TrimSpace(caption); caption != "" {
+		return line + "\n" + m.renderText(store.Message{}, caption, w)
+	}
+	return line
 }
 
 func clock(d time.Duration) string {
@@ -593,7 +623,7 @@ func (m Model) hintPairs() [][2]string {
 	case m.focus == focusProfiles:
 		return [][2]string{{"Profiles", "enter"}, {"Actions", "space"}, {"Add", "a"}, {"Next/prev profile", "gt/gT"}, {"Chats", "^j"}}
 	case m.focus == focusList:
-		return [][2]string{{"Open", "enter"}, {"New chat", "n"}, {"Write", "i"}, {"Search", "/"}, {"Next/prev chat", "J/K"}, {"Archived", "A"}, {"Command", ":"}, {"Keybindings", "?"}}
+		return [][2]string{{"Open", "enter"}, {"Actions", "space"}, {"New chat", "n"}, {"Write", "i"}, {"Search", "/"}, {"Next/prev chat", "J/K"}, {"Archived", "A"}, {"Command", ":"}, {"Keybindings", "?"}}
 	}
 	if m.menu != nil {
 		return [][2]string{{"Move", "^n/^p"}, {"Pick", "enter"}, {"Close", "esc"}}
@@ -620,6 +650,7 @@ func helpView(w int) string {
 		{"/", "search chats (esc clears)"},
 		{"A", "toggle archived chats"},
 		{"n", "new chat / new group (search contacts or type a number)"},
+		{"space", "chat menu: pin, mute, archive, read/unread, delete, leave"},
 		{"", ""},
 		{"", "Messages"},
 		{"j / k", "select next / previous message"},

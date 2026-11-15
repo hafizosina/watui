@@ -39,7 +39,7 @@ All profiles stay connected; the screen shows one at a time. The top-left **[1] 
 | anywhere | `gt` / `gT` | next / previous profile |
 | anywhere | `1` (or `Ctrl+k` from Chats) | focus the Profile box |
 | Profile box | `Enter` | list of profiles (unread per profile) → pick with `Ctrl+n`/`Ctrl+p` + `Enter`, or its number |
-| Profile box | `Space` | actions: Rename · Reconnect · Log out · Remove · Add profile |
+| Profile box | `Space` | actions: My profile · Turn off/on desktop notifications (per profile, shows ) · Rename · Reconnect · Log out · Remove · Add profile |
 | Profile box | `a` | add a profile (QR code) |
 | command | `:profile <name>`, `:profile add <name>`, `:profile rename <name> <label>` | same from the command line |
 
@@ -59,6 +59,7 @@ The screen has two panes: **chat list** (left) and **messages** (right). `Tab` s
 | | `/` | search chats |
 | | `A` | show archived chats |
 | | `n` | new chat / new group (also `:new`) |
+| | `Space` | chat menu: Open · Pin · Mute (8h / 1 week / always) · Archive · Mark read/unread · Copy number · Leave group · Delete chat |
 | NORMAL (messages) | `j` / `k` | select next / previous message |
 | | `Ctrl+d` / `Ctrl+u`, `gg` / `G` | jump |
 | | `Space` | message menu (like right-click) |
@@ -79,6 +80,19 @@ The screen has two panes: **chat list** (left) and **messages** (right). `Tab` s
 | INSERT | type; `Enter` new line; `Esc` or `jk` → NORMAL; `Ctrl+w` delete word; `Ctrl+u` delete to line start |
 | NORMAL | `h j k l w b e 0 ^ $ gg G` move · `i a I A o O` insert · `x X dd D dw de diw daw` delete · `cw ce ciw cc C s S` change · `yy Y yiw p P` yank/paste · `u` / `Ctrl+r` undo/redo · `J` join · `~` case · `r` replace · `v` / `V` visual · `Esc` leaves Compose |
 | VISUAL / V-LINE | move to extend · `d` / `x` delete · `y` yank · `c` change · `~ u U` case · `o` other end · `p` replace with yank · `Esc` back |
+
+### Profile details
+
+Shown in the [3] box in place of the messages (`Esc` goes back), with the profile picture in kitty:
+
+| Open with | Shows |
+|---|---|
+| Profile box → `Space` → **My profile**, or `:me` | your picture, name, number, about |
+| Chats → `Space` on a 1:1 chat → **Contact info** (`i`), or `:info` | picture, address-book name, WhatsApp name, number, about, business, groups in common |
+| Chats → `Space` on a group → **Group info** (`i`), or `:info` | picture, name, description, created date/by, settings, members (admins/owner marked) |
+| Messages → `Space` on someone's message in a group → **Sender info** | that person's details |
+
+In group info: `j`/`k` move through members, `Enter` opens a chat with them, `Space` shows their details, `y` copies their number. In contact info, `Enter` opens the chat. No picture? A colored avatar with initials is shown instead.
 
 ### New chat and new group
 
@@ -102,7 +116,9 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 | Play / Pause voice note | `o` | plays in the background with mpv; progress bar on the message and in the status box |
 | Speed | `.` | 1× → 1.5× → 2× while a voice note plays |
 | Stop | `x` | stop the voice note |
-| Save to ~/Downloads/WhatsApp | `S` | pictures, videos, voice notes, stickers |
+| Open file | `o` | documents: downloads once, opens with the desktop default app |
+| View in nvim | `v` | text/code documents (.py .go .sql .json .md .csv …), read-only; `:q` returns |
+| Save to ~/Downloads/WhatsApp | `S` | pictures, videos, voice notes, stickers, documents (original file name, never overwrites) |
 | Show / Hide image | `v` | shows pictures that are hidden (older than the newest 40, or `images=off`/`thumbnail`) |
 | Open image in viewer | `o` | opens the downloaded picture with `xdg-open` |
 | Copy text | `y` | via `xclip` |
@@ -122,7 +138,14 @@ images = always        # always | thumbnail | off
 image_width = 40       # biggest picture size, in terminal cells
 image_height = 15
 collapse_lines = 15    # long messages fold after this many lines (0 = never)
+notify = on            # on | private (sender only) | off
 ```
+
+### Desktop notifications
+
+New messages pop up via `notify-send` (one notification per chat, updated in place). Clicking it opens that chat in watui (switching profile if needed) and brings the tmux pane and kitty window to the front. No notification for muted or archived chats, for the chat you are reading while watui is focused, or for old messages arriving after a reconnect. `notify = private` shows only who wrote; `:set notify=off` mutes them for the session.
+
+Calls: watui can't take calls, but an incoming voice/video (or group) call shows a notification ("answer on your phone"). If nobody answers on any device, it turns into "Missed voice call" and a red missed-call line is added to that chat (unread, like on the phone).
 
 | `images` | What you see |
 |---|---|
@@ -150,9 +173,9 @@ Downloaded pictures are cached in `~/.cache/watui/images/` (safe to delete).
 
 ## Not supported yet
 
-Sending new images, files or voice notes, playing video inside the terminal, animated stickers, voice/video calls, desktop notifications, showing which message is pinned.
+Sending new images, files or voice notes, playing video inside the terminal, Lottie (vector) stickers, voice/video calls, showing which message is pinned.
 
-Video and voice notes need `mpv` (and `ffmpeg` for grabbing a sharp video frame): `sudo apt install mpv ffmpeg`.
+Video and voice notes need `mpv`; `ffmpeg` grabs video frames and animates GIFs inline; ImageMagick (`convert`) animates stickers: `sudo apt install mpv ffmpeg imagemagick`.
 
 ## Keep it updated
 

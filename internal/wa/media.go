@@ -12,8 +12,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	_ "golang.org/x/image/webp"
@@ -27,6 +30,7 @@ const (
 	MediaSticker = "sticker"
 	MediaVideo   = "video"
 	MediaAudio   = "audio"
+	MediaDoc     = "document"
 )
 
 func mediaOf(m *waE2E.Message) (string, []byte) {
@@ -43,6 +47,8 @@ func mediaOf(m *waE2E.Message) (string, []byte) {
 		kind, part = MediaVideo, m.GetPtvMessage()
 	case m.GetAudioMessage() != nil:
 		kind, part = MediaAudio, m.GetAudioMessage()
+	case m.GetDocumentMessage() != nil:
+		kind, part = MediaDoc, m.GetDocumentMessage()
 	default:
 		return "", nil
 	}
@@ -77,6 +83,8 @@ func (c *Client) mediaMessage(chatJID, msgID string) (string, downloadable, erro
 		msg = &waE2E.VideoMessage{}
 	case MediaAudio:
 		msg = &waE2E.AudioMessage{}
+	case MediaDoc:
+		msg = &waE2E.DocumentMessage{}
 	default:
 		return "", nil, errors.New("no media in this message")
 	}
@@ -140,7 +148,13 @@ func (c *Client) MediaFile(ctx context.Context, chatJID, msgID string) (string, 
 	if err != nil {
 		return "", "", err
 	}
-	path := filepath.Join(dir, safeName(msgID)+extFor(kind, msg.GetMimetype()))
+	ext := extFor(kind, msg.GetMimetype())
+	if d, ok := msg.(*waE2E.DocumentMessage); ok {
+		if e := filepath.Ext(d.GetFileName()); e != "" && len(e) <= 10 {
+			ext = strings.ToLower(e)
+		}
+	}
+	path := filepath.Join(dir, safeName(msgID)+ext)
 
 	lock, _ := downloadLocks.LoadOrStore(path, &sync.Mutex{})
 	lock.(*sync.Mutex).Lock()
@@ -169,42 +183,145 @@ func safeName(s string) string {
 	}, s)
 }
 
-func (c *Client) LoadImage(ctx context.Context, chatJID, msgID string, q media.Quality) (image.Image, error) {
+func still(img image.Image, err error) ([]media.Frame, error) {
+	if err != nil {
+		return nil, err
+	}
+	return []media.Frame{{Img: img}}, nil
+}
+
+func decode(raw []byte) (image.Image, error) {
+	img, _, err := image.Decode(bytes.NewReader(raw))
+	return img, err
+}
+
+func (c *Client) LoadImage(ctx context.Context, chatJID, msgID string, q media.Quality) ([]media.Frame, error) {
+	if strings.HasPrefix(msgID, PicturePrefix) {
+		return still(c.loadPicture(ctx, msgID))
+	}
 	kind, msg, err := c.mediaMessage(chatJID, msgID)
 	if err != nil {
 		return nil, err
 	}
-	var raw []byte
 	switch m := msg.(type) {
 	case *waE2E.ImageMessage:
 		if q == media.Thumbnail {
-			raw = m.GetJPEGThumbnail()
-		} else if raw, err = c.WA.Download(ctx, m); err != nil {
+			if len(m.GetJPEGThumbnail()) == 0 {
+				return nil, errors.New("no preview available")
+			}
+			return still(decode(m.GetJPEGThumbnail()))
+		}
+		raw, err := c.WA.Download(ctx, m)
+		if err != nil {
 			return nil, err
 		}
+		return still(decode(raw))
 	case *waE2E.StickerMessage:
-		if m.GetIsAnimated() {
-			return nil, errors.New("animated sticker")
-		}
-		if raw, err = c.WA.Download(ctx, m); err != nil {
+		path, _, err := c.MediaFile(ctx, chatJID, msgID)
+		if err != nil {
 			return nil, err
 		}
-	case *waE2E.VideoMessage:
-		if q == media.Full {
-			return c.videoFrame(ctx, chatJID, msgID)
+		if m.GetIsAnimated() || m.GetIsLottie() {
+			return animatedWebP(ctx, path)
 		}
-		raw = m.GetJPEGThumbnail()
-		if len(raw) == 0 {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		img, err := decode(raw)
+		if err != nil {
+			return animatedWebP(ctx, path)
+		}
+		return []media.Frame{{Img: img}}, nil
+	case *waE2E.VideoMessage:
+		if m.GetGifPlayback() && q == media.Full {
+			return c.gifFrames(ctx, chatJID, msgID)
+		}
+		if q == media.Full {
+			return still(c.videoFrame(ctx, chatJID, msgID))
+		}
+		if len(m.GetJPEGThumbnail()) == 0 {
 			return nil, errors.New("no preview (Space → Show image grabs a frame)")
 		}
-	default:
-		return nil, fmt.Errorf("%s has no picture", kind)
+		return still(decode(m.GetJPEGThumbnail()))
 	}
-	if len(raw) == 0 {
-		return nil, errors.New("no preview available")
+	return nil, fmt.Errorf("%s has no picture", kind)
+}
+
+// animatedWebP splits an animated sticker into frames with ImageMagick.
+func animatedWebP(ctx context.Context, path string) ([]media.Frame, error) {
+	if _, err := exec.LookPath("convert"); err != nil {
+		return nil, errors.New("install imagemagick to show animated stickers")
 	}
-	img, _, err := image.Decode(bytes.NewReader(raw))
-	return img, err
+	dir, err := os.MkdirTemp("", "watui-anim-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	if out, err := exec.CommandContext(ctx, "convert", path, "-coalesce", filepath.Join(dir, "f_%03d.png")).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("imagemagick: %v %s", err, strings.TrimSpace(string(out)))
+	}
+	var delays []string
+	if out, err := exec.CommandContext(ctx, "identify", "-format", "%T ", path).Output(); err == nil {
+		delays = strings.Fields(string(out))
+	}
+	return readFrames(dir, func(i int) time.Duration {
+		if i < len(delays) {
+			if cs, err := strconv.Atoi(delays[i]); err == nil && cs > 0 {
+				return time.Duration(cs) * 10 * time.Millisecond
+			}
+		}
+		return 100 * time.Millisecond
+	})
+}
+
+// gifFrames turns a WhatsApp GIF (a short mp4) into frames with ffmpeg.
+func (c *Client) gifFrames(ctx context.Context, chatJID, msgID string) ([]media.Frame, error) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		return nil, errors.New("install ffmpeg to play GIFs inline")
+	}
+	path, _, err := c.MediaFile(ctx, chatJID, msgID)
+	if err != nil {
+		return nil, err
+	}
+	return videoFrames(ctx, path)
+}
+
+func videoFrames(ctx context.Context, path string) ([]media.Frame, error) {
+	dir, err := os.MkdirTemp("", "watui-gif-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	if out, err := exec.CommandContext(ctx, "ffmpeg", "-loglevel", "error", "-i", path,
+		"-vf", "fps=10,scale='min(480,iw)':-2", "-frames:v", "60", filepath.Join(dir, "f_%03d.png")).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("ffmpeg: %v %s", err, strings.TrimSpace(string(out)))
+	}
+	return readFrames(dir, func(int) time.Duration { return 100 * time.Millisecond })
+}
+
+func readFrames(dir string, delay func(i int) time.Duration) ([]media.Frame, error) {
+	names, err := filepath.Glob(filepath.Join(dir, "f_*.png"))
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(names)
+	var frames []media.Frame
+	for i, name := range names {
+		raw, err := os.ReadFile(name)
+		if err != nil {
+			return nil, err
+		}
+		img, err := decode(raw)
+		if err != nil {
+			return nil, err
+		}
+		frames = append(frames, media.Frame{Img: img, Delay: delay(i)})
+	}
+	if len(frames) == 0 {
+		return nil, errors.New("no frames decoded")
+	}
+	return frames, nil
 }
 
 func (c *Client) videoFrame(ctx context.Context, chatJID, msgID string) (image.Image, error) {
@@ -228,6 +345,18 @@ func (c *Client) videoFrame(ctx context.Context, chatJID, msgID string) (image.I
 	return img, err
 }
 
+// FileName is the document's original name, if the message has one.
+func (c *Client) FileName(chatJID, msgID string) string {
+	_, msg, err := c.mediaMessage(chatJID, msgID)
+	if err != nil {
+		return ""
+	}
+	if d, ok := msg.(*waE2E.DocumentMessage); ok {
+		return filepath.Base(d.GetFileName())
+	}
+	return ""
+}
+
 // SaveMedia copies the media file to ~/Downloads/WhatsApp and returns the new path.
 func (c *Client) SaveMedia(ctx context.Context, chatJID, msgID string, when string) (string, error) {
 	src, _, err := c.MediaFile(ctx, chatJID, msgID)
@@ -242,10 +371,28 @@ func (c *Client) SaveMedia(ctx context.Context, chatJID, msgID string, when stri
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	dst := filepath.Join(dir, when+"-"+safeName(msgID)+filepath.Ext(src))
+	name := when + "-" + safeName(msgID) + filepath.Ext(src)
+	if orig := c.FileName(chatJID, msgID); orig != "" && orig != "." && orig != "/" {
+		name = orig
+	}
+	dst := uniquePath(filepath.Join(dir, name))
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return "", err
 	}
 	return dst, os.WriteFile(dst, data, 0o644)
+}
+
+func uniquePath(path string) string {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return path
+	}
+	ext := filepath.Ext(path)
+	base := strings.TrimSuffix(path, ext)
+	for i := 1; ; i++ {
+		p := fmt.Sprintf("%s (%d)%s", base, i, ext)
+		if _, err := os.Stat(p); os.IsNotExist(err) {
+			return p
+		}
+	}
 }

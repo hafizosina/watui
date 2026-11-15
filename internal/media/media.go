@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -27,7 +28,20 @@ const (
 	Thumbnail
 )
 
-type Loader func(ctx context.Context, chatJID, msgID string, q Quality) (image.Image, error)
+// Frame is one picture of an image; a still image has one frame.
+type Frame struct {
+	Img   image.Image
+	Delay time.Duration
+}
+
+type Loader func(ctx context.Context, chatJID, msgID string, q Quality) ([]Frame, error)
+
+const (
+	maxFrames   = 60
+	animMaxW    = 480
+	stillMaxW   = 900
+	minFrameGap = 20 * time.Millisecond
+)
 
 type state int
 
@@ -126,23 +140,98 @@ func (m *Manager) Request(chatJID, msgID string, q Quality, box Box) {
 	}()
 }
 
-func (m *Manager) prepare(chatJID, msgID string, q Quality, box Box) (uint32, int, int, error) {
-	path := filepath.Join(m.cacheDir, safeName(msgID)+fmt.Sprintf("-%d.png", q))
-	w, h, err := pngSize(path)
+type cached struct {
+	paths  []string
+	delays []time.Duration
+	w, h   int
+}
+
+func (m *Manager) framesDir(msgID string, q Quality) string {
+	return filepath.Join(m.cacheDir, safeName(msgID)+fmt.Sprintf("-%d.anim", q))
+}
+
+func (m *Manager) readCache(msgID string, q Quality) (cached, bool) {
+	still := filepath.Join(m.cacheDir, safeName(msgID)+fmt.Sprintf("-%d.png", q))
+	if w, h, err := pngSize(still); err == nil {
+		return cached{paths: []string{still}, delays: []time.Duration{0}, w: w, h: h}, true
+	}
+	dir := m.framesDir(msgID, q)
+	data, err := os.ReadFile(filepath.Join(dir, "delays"))
 	if err != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		return cached{}, false
+	}
+	var c cached
+	for i, field := range strings.Fields(string(data)) {
+		ms, err := strconv.Atoi(field)
+		if err != nil {
+			return cached{}, false
+		}
+		c.paths = append(c.paths, filepath.Join(dir, fmt.Sprintf("%03d.png", i)))
+		c.delays = append(c.delays, time.Duration(ms)*time.Millisecond)
+	}
+	if len(c.paths) == 0 {
+		return cached{}, false
+	}
+	c.w, c.h, err = pngSize(c.paths[0])
+	return c, err == nil
+}
+
+func (m *Manager) writeCache(msgID string, q Quality, frames []Frame) (cached, error) {
+	if len(frames) == 1 {
+		img := shrink(frames[0].Img, stillMaxW)
+		path := filepath.Join(m.cacheDir, safeName(msgID)+fmt.Sprintf("-%d.png", q))
+		if err := writePNG(path, img); err != nil {
+			return cached{}, err
+		}
+		return cached{paths: []string{path}, delays: []time.Duration{0}, w: img.Bounds().Dx(), h: img.Bounds().Dy()}, nil
+	}
+	if len(frames) > maxFrames {
+		frames = frames[:maxFrames]
+	}
+	dir := m.framesDir(msgID, q)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return cached{}, err
+	}
+	var c cached
+	var delays []string
+	for i, f := range frames {
+		img := shrink(f.Img, animMaxW)
+		path := filepath.Join(dir, fmt.Sprintf("%03d.png", i))
+		if err := writePNG(path, img); err != nil {
+			return cached{}, err
+		}
+		if i == 0 {
+			c.w, c.h = img.Bounds().Dx(), img.Bounds().Dy()
+		}
+		d := max(f.Delay, minFrameGap)
+		c.paths = append(c.paths, path)
+		c.delays = append(c.delays, d)
+		delays = append(delays, strconv.Itoa(int(d/time.Millisecond)))
+	}
+	return c, os.WriteFile(filepath.Join(dir, "delays"), []byte(strings.Join(delays, " ")+"\n"), 0o600)
+}
+
+func pathPayload(path string) []byte {
+	return []byte(base64.StdEncoding.EncodeToString([]byte(path)))
+}
+
+func (m *Manager) prepare(chatJID, msgID string, q Quality, box Box) (uint32, int, int, error) {
+	c, ok := m.readCache(msgID, q)
+	if !ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
-		img, err := m.load(ctx, chatJID, msgID, q)
+		frames, err := m.load(ctx, chatJID, msgID, q)
 		if err != nil {
 			return 0, 0, 0, err
 		}
-		img = shrink(img, 900)
-		if err := writePNG(path, img); err != nil {
+		if len(frames) == 0 {
+			return 0, 0, 0, fmt.Errorf("no picture")
+		}
+		if c, err = m.writeCache(msgID, q, frames); err != nil {
 			return 0, 0, 0, err
 		}
-		w, h = img.Bounds().Dx(), img.Bounds().Dy()
 	}
-	cols, rows := fit(w, h, box, cellRatio())
+	cols, rows := fit(c.w, c.h, box, cellRatio())
 	id := imageIDs.Add(1)
 	if m.nextID != 0 {
 		m.mu.Lock()
@@ -150,13 +239,33 @@ func (m *Manager) prepare(chatJID, msgID string, q Quality, box Box) (uint32, in
 		id = m.nextID
 		m.mu.Unlock()
 	}
-	seq := ansi.KittyGraphics([]byte(base64.StdEncoding.EncodeToString([]byte(path))),
+	seq := ansi.KittyGraphics(pathPayload(c.paths[0]),
 		"a=T", "U=1", "f=100", "t=f", "q=2",
 		fmt.Sprintf("i=%d", id), fmt.Sprintf("c=%d", cols), fmt.Sprintf("r=%d", rows))
 	if err := m.write(seq); err != nil {
 		return 0, 0, 0, err
 	}
+	if len(c.paths) > 1 {
+		if err := m.animate(id, c); err != nil {
+			return 0, 0, 0, err
+		}
+	}
 	return id, cols, rows, nil
+}
+
+func (m *Manager) animate(id uint32, c cached) error {
+	idOpt := fmt.Sprintf("i=%d", id)
+	for i := 1; i < len(c.paths); i++ {
+		seq := ansi.KittyGraphics(pathPayload(c.paths[i]), "a=f", idOpt, "f=100", "t=f", "q=2",
+			fmt.Sprintf("z=%d", c.delays[i]/time.Millisecond))
+		if err := m.write(seq); err != nil {
+			return err
+		}
+	}
+	if err := m.write(ansi.KittyGraphics(nil, "a=a", idOpt, "r=1", fmt.Sprintf("z=%d", c.delays[0]/time.Millisecond), "q=2")); err != nil {
+		return err
+	}
+	return m.write(ansi.KittyGraphics(nil, "a=a", idOpt, "s=3", "v=1", "q=2"))
 }
 
 func (m *Manager) write(seq string) error {
@@ -198,9 +307,8 @@ func (m *Manager) Lines(msgID string, q Quality) ([]string, string, bool) {
 
 func (m *Manager) Path(msgID string) string {
 	for _, q := range []Quality{Full, Thumbnail} {
-		path := filepath.Join(m.cacheDir, safeName(msgID)+fmt.Sprintf("-%d.png", q))
-		if _, err := os.Stat(path); err == nil {
-			return path
+		if c, ok := m.readCache(msgID, q); ok {
+			return c.paths[0]
 		}
 	}
 	return ""

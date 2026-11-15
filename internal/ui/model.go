@@ -104,6 +104,7 @@ type Model struct {
 	forceHide    map[string]bool
 	shownImages  map[string]media.Quality
 	pendingGroup []string
+	info         *infoState
 	expanded     map[string]bool
 	foldable     map[string]bool
 
@@ -191,6 +192,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.refresh()
 		return m, m.markReadCmd()
+	case infoLoadedMsg:
+		return m.infoLoaded(msg)
+	case viewFileMsg:
+		if msg.err != nil {
+			m.setFlash(msg.err.Error(), true)
+			return m, nil
+		}
+		return m, viewFileCmd(msg.path)
+	case CallMsg:
+		return m.call(msg)
+	case IncomingMsg:
+		return m.incoming(msg)
+	case OpenChatMsg:
+		return m.openFromNotification(msg)
 	case newChatMsg:
 		return m.newChatReady(msg)
 	case profileAddedMsg:
@@ -348,9 +363,15 @@ func (m Model) openChat() (store.Chat, bool) {
 }
 
 func (m *Model) open(jid string) {
+	m.info = nil
 	if m.openJID != jid {
 		m.input.Reset()
 		m.replyTo, m.editing = nil, nil
+	}
+	if m.opts.Notifier != nil {
+		if p := m.activeProfile(); p != nil {
+			m.opts.Notifier.Forget(NoteKey(p.Name, jid))
+		}
 	}
 	m.openJID = jid
 	msgs, err := m.wa.Store.Messages(jid, messageLimit)
@@ -370,6 +391,7 @@ func (m *Model) enterCompose(v vimMode) {
 	if m.openJID == "" {
 		return
 	}
+	m.info = nil
 	m.mode = modeInsert
 	m.focus = focusChat
 	m.input.Focus(v)

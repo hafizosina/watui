@@ -245,6 +245,13 @@ func (c *Client) Forward(ctx context.Context, m store.Message, toChatJID string)
 		}
 		vid.ContextInfo = fwd
 		content.VideoMessage = &vid
+	case MediaDoc:
+		var doc waE2E.DocumentMessage
+		if err := proto.Unmarshal(data, &doc); err != nil {
+			return err
+		}
+		doc.ContextInfo = fwd
+		content.DocumentMessage = &doc
 	case MediaAudio:
 		var au waE2E.AudioMessage
 		if err := proto.Unmarshal(data, &au); err != nil {

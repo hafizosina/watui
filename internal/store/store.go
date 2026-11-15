@@ -252,6 +252,14 @@ func (s *Store) MarkReadByIDs(chatJID string, ids []string) error {
 	return err
 }
 
+func (s *Store) DeleteChat(jid string) error {
+	if _, err := s.db.Exec(`DELETE FROM messages WHERE chat_jid = ?`, jid); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`DELETE FROM chats WHERE jid = ?`, jid)
+	return err
+}
+
 func (s *Store) MarkUnreadByIDs(chatJID string, ids []string) error {
 	for _, id := range ids {
 		if _, err := s.db.Exec(`UPDATE messages SET read = 0 WHERE chat_jid = ? AND id = ?`, chatJID, id); err != nil {
@@ -302,6 +310,21 @@ func (s *Store) Chats() ([]Chat, error) {
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+func (s *Store) Chat(jid string) (Chat, bool, error) {
+	var c Chat
+	var lastTS, muted int64
+	err := s.db.QueryRow(`SELECT jid, name, last_ts, pinned, archived, muted_until, is_group FROM chats WHERE jid = ?`, jid).
+		Scan(&c.JID, &c.Name, &lastTS, &c.Pinned, &c.Archived, &muted, &c.IsGroup)
+	if err == sql.ErrNoRows {
+		return c, false, nil
+	}
+	if err != nil {
+		return c, false, err
+	}
+	c.LastTS, c.MutedUntil = time.Unix(lastTS, 0), time.Unix(muted, 0)
+	return c, true, nil
 }
 
 func (s *Store) Messages(jid string, limit int) ([]Message, error) {

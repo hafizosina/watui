@@ -3,7 +3,9 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -213,6 +215,11 @@ func (m *Model) openMessageMenu() {
 		return
 	}
 	var items []menuItem
+	if chat, _ := m.openChat(); chat.IsGroup && !msg.FromMe && msg.SenderJID != "" {
+		items = append(items, menuItem{label: "Sender info", key: "i", run: func(m *Model) tea.Cmd {
+			return m.personInfoCmd(msg.SenderJID, m.wa.ContactName(msg.SenderJID, msg.SenderName))
+		}})
+	}
 	if m.foldable[msg.ID] {
 		label := "Expand message"
 		if m.expanded[msg.ID] {
@@ -296,6 +303,30 @@ func (m *Model) openMessageMenu() {
 					secs := client.MediaSeconds(msg.ChatJID, msg.ID)
 					return pl.PlayAudio(msg.ID, path, time.Duration(secs)*time.Second)
 				})
+			}})
+		}
+	}
+	if msg.MediaType == wa.MediaDoc && !msg.Deleted {
+		client := m.wa
+		items = append(items, menuItem{label: "Open file", key: "o", run: func(m *Model) tea.Cmd {
+			m.setFlash("downloading…", false)
+			return m.actionCmd("", func(ctx context.Context) error {
+				path, _, err := client.MediaFile(ctx, msg.ChatJID, msg.ID)
+				if err != nil {
+					return err
+				}
+				return exec.Command("xdg-open", path).Start()
+			})
+		}})
+		if isTextFile(client.FileName(msg.ChatJID, msg.ID)) {
+			items = append(items, menuItem{label: "View in nvim (read-only)", key: "v", run: func(m *Model) tea.Cmd {
+				m.setFlash("downloading…", false)
+				return func() tea.Msg {
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+					defer cancel()
+					path, _, err := client.MediaFile(ctx, msg.ChatJID, msg.ID)
+					return viewFileMsg{path: path, err: err}
+				}
 			}})
 		}
 	}
@@ -460,7 +491,7 @@ func plainText(msg store.Message) string {
 }
 
 func isMediaText(text string) bool {
-	for _, tag := range []string{"[image]", "[sticker]", "[video", "[gif]", "[voice note", "[audio"} {
+	for _, tag := range []string{"[image]", "[sticker]", "[video", "[gif]", "[voice note", "[audio", "[document"} {
 		if strings.HasPrefix(text, tag) {
 			return true
 		}
@@ -486,4 +517,41 @@ func runDetached(name string, args ...string) tea.Cmd {
 		}
 		return nil
 	}
+}
+
+type viewFileMsg struct {
+	path string
+	err  error
+}
+
+var textExts = map[string]bool{
+	".txt": true, ".md": true, ".csv": true, ".tsv": true, ".log": true, ".json": true, ".xml": true,
+	".yml": true, ".yaml": true, ".toml": true, ".ini": true, ".conf": true, ".cfg": true, ".env": true,
+	".properties": true, ".sql": true, ".py": true, ".go": true, ".java": true, ".kt": true, ".js": true,
+	".ts": true, ".tsx": true, ".jsx": true, ".c": true, ".h": true, ".cpp": true, ".hpp": true, ".rs": true,
+	".rb": true, ".php": true, ".sh": true, ".bash": true, ".zsh": true, ".html": true, ".css": true,
+	".scss": true, ".lua": true, ".vim": true, ".gradle": true, ".dart": true, ".swift": true, ".http": true,
+}
+
+func isTextFile(name string) bool {
+	return textExts[strings.ToLower(filepath.Ext(name))]
+}
+
+func viewFileCmd(path string) tea.Cmd {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "nvim"
+	}
+	parts := strings.Fields(editor)
+	args := parts[1:]
+	if strings.Contains(parts[0], "vi") {
+		args = append(args, "-R")
+	}
+	cmd := exec.Command(parts[0], append(args, path)...)
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		if err != nil {
+			return actionDoneMsg{err: err}
+		}
+		return nil
+	})
 }

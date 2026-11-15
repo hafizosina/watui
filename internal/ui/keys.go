@@ -49,7 +49,7 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "ctrl+j":
 			switch {
-			case m.mode == modeNormal && m.focus == focusChat && m.openJID != "":
+			case m.mode == modeNormal && m.focus == focusChat && m.openJID != "" && m.info == nil:
 				m.enterCompose(vimNormal)
 				return m, nil
 			case m.mode == modeNormal && m.focus == focusProfiles:
@@ -71,6 +71,11 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.showHelp {
 		m.showHelp = false
 		return m, nil
+	}
+	if m.info != nil && m.focus == focusChat {
+		if next, cmd, handled := m.infoKey(k.String()); handled {
+			return next, cmd
+		}
 	}
 	return m.normalKey(k)
 }
@@ -247,6 +252,9 @@ func (m Model) listKey(key string) (tea.Model, tea.Cmd) {
 	case "n":
 		m.openNewChat()
 		return m, nil
+	case " ", "m":
+		m.openChatMenu()
+		return m, nil
 	case "A":
 		m.showArchived = !m.showArchived
 		m.filter = ""
@@ -391,6 +399,16 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 	case "new":
 		m.openNewChat()
 		return m, nil
+	case "info":
+		if m.openJID == "" {
+			return m, m.myInfoCmd()
+		}
+		if strings.HasSuffix(m.openJID, "@g.us") {
+			return m, m.groupInfoCmd(m.openJID, m.names[m.openJID])
+		}
+		return m, m.personInfoCmd(m.openJID, m.names[m.openJID])
+	case "me":
+		return m, m.myInfoCmd()
 	case "group":
 		_, name, _ := strings.Cut(cmd, " ")
 		if len(m.pendingGroup) == 0 {
@@ -406,7 +424,7 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 		_, arg, _ := strings.Cut(cmd, " ")
 		arg = strings.TrimSpace(arg)
 		if arg == "" {
-			m.setFlash(fmt.Sprintf("images=%s image_width=%d image_height=%d collapse_lines=%d", m.cfg.Images, m.cfg.ImageWidth, m.cfg.ImageHeight, m.cfg.CollapseLines), false)
+			m.setFlash(fmt.Sprintf("images=%s image_width=%d image_height=%d collapse_lines=%d notify=%s", m.cfg.Images, m.cfg.ImageWidth, m.cfg.ImageHeight, m.cfg.CollapseLines, m.cfg.Notify), false)
 			return m, nil
 		}
 		if err := m.cfg.Set(arg); err != nil {

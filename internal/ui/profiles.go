@@ -15,13 +15,15 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/zhenzhu/watui/internal/media"
+	"github.com/zhenzhu/watui/internal/notify"
 	"github.com/zhenzhu/watui/internal/profile"
 	"github.com/zhenzhu/watui/internal/wa"
 )
 
 type Options struct {
-	Root  string
-	Watch func(p *profile.Profile)
+	Root     string
+	Watch    func(p *profile.Profile)
+	Notifier *notify.Notifier
 }
 
 type profileAddedMsg struct {
@@ -96,6 +98,9 @@ func (m Model) profilesView(w int) string {
 		badge = styleDim.Render(fmt.Sprintf("%d profiles ", len(m.profiles)))
 	}
 	line := lipgloss.NewStyle().Foreground(colGreen).Render(" ● ") + lipgloss.NewStyle().Foreground(colFg).Bold(true).Render(p.Label())
+	if !p.NotifyEnabled() {
+		line += styleMuted.Render(" " + iconMute + " muted")
+	}
 	if me := p.WA.Me(); me != "" && p.Linked() {
 		room := max(1, w-lipgloss.Width(line)-lipgloss.Width(badge)-3)
 		line += styleDim.Render(" · " + ansi.Truncate(sanitize(me), room, "…"))
@@ -125,6 +130,9 @@ func (m *Model) openProfilePicker() {
 		label := "○ " + p.Label()
 		if i == m.active {
 			label = "● " + p.Label()
+		}
+		if !p.NotifyEnabled() {
+			label += "  · " + iconMute + " notifications off"
 		}
 		switch {
 		case !p.Linked():
@@ -386,6 +394,11 @@ func (m *Model) openProfileMenu() {
 			return cmd
 		}})
 	}
+	if p.Linked() && idx == m.active {
+		items = append(items, menuItem{label: "My profile", key: "i", run: func(m *Model) tea.Cmd {
+			return m.myInfoCmd()
+		}})
+	}
 	items = append(items, menuItem{label: "Rename…", key: "r", run: func(m *Model) tea.Cmd {
 		m.mode = modeCommand
 		m.prompt.SetValue("profile rename " + p.Name + " ")
@@ -393,6 +406,15 @@ func (m *Model) openProfileMenu() {
 		m.prompt.Focus()
 		return nil
 	}})
+	if p.NotifyEnabled() {
+		items = append(items, menuItem{label: "Turn off desktop notifications", key: "n", run: func(m *Model) tea.Cmd {
+			return errOrFlash(m, p.SetNotify(false), "notifications off for "+p.Label())
+		}})
+	} else {
+		items = append(items, menuItem{label: "Turn on desktop notifications", key: "n", run: func(m *Model) tea.Cmd {
+			return errOrFlash(m, p.SetNotify(true), "notifications on for "+p.Label())
+		}})
+	}
 	if p.Linked() {
 		items = append(items, menuItem{label: "Reconnect", key: "c", run: func(m *Model) tea.Cmd {
 			return m.actionCmd("reconnecting "+p.Label(), func(ctxDone context.Context) error { return p.Reconnect() })
@@ -460,4 +482,13 @@ func (m Model) profileRemoved(msg profileRemovedMsg) (tea.Model, tea.Cmd) {
 		m.setFlash("removed profile "+msg.p.Label(), false)
 	}
 	return m, nil
+}
+
+func errOrFlash(m *Model, err error, ok string) tea.Cmd {
+	if err != nil {
+		m.setFlash(err.Error(), true)
+		return nil
+	}
+	m.setFlash(ok, false)
+	return nil
 }

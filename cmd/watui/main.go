@@ -12,9 +12,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/zhenzhu/watui/internal/config"
+	"github.com/zhenzhu/watui/internal/notify"
 	"github.com/zhenzhu/watui/internal/player"
 	"github.com/zhenzhu/watui/internal/profile"
+	"github.com/zhenzhu/watui/internal/store"
 	"github.com/zhenzhu/watui/internal/ui"
+	"github.com/zhenzhu/watui/internal/wa"
 )
 
 var version = "dev"
@@ -152,8 +155,24 @@ func run() error {
 	}
 
 	var prog *tea.Program
+	notifier := notify.New(func(key string) {
+		if prog != nil {
+			name, jid := ui.SplitNoteKey(key)
+			prog.Send(ui.OpenChatMsg{Profile: name, JID: jid})
+		}
+	})
 	watch := func(p *profile.Profile) {
 		name := p.Name
+		p.WA.OnCall(func(ev wa.CallEvent) {
+			if prog != nil {
+				prog.Send(ui.CallMsg{Profile: name, Ev: ev})
+			}
+		})
+		p.WA.OnIncoming(func(msg store.Message) {
+			if prog != nil {
+				prog.Send(ui.IncomingMsg{Profile: name, Msg: msg})
+			}
+		})
 		go func() {
 			for range p.WA.Changed() {
 				time.Sleep(150 * time.Millisecond)
@@ -176,7 +195,8 @@ func run() error {
 	}
 	ordered := append(active, unlinked(profiles)...)
 	model := ui.New(ordered, cfg, pl, ui.Options{
-		Root: root,
+		Root:     root,
+		Notifier: notifier,
 		Watch: func(p *profile.Profile) {
 			profiles = append(profiles, p)
 			watch(p)

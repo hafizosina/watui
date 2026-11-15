@@ -56,3 +56,40 @@ func TestPlayAudio(t *testing.T) {
 	}
 	t.Fatal("stop should end playback")
 }
+
+func TestControlsDoNotBlockOnNotify(t *testing.T) {
+	if !HasMPV() {
+		t.Skip("mpv not installed")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	path := filepath.Join(t.TempDir(), "tone.ogg")
+	if out, err := exec.Command("ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=4", "-c:a", "libopus", path).CombinedOutput(); err != nil {
+		t.Fatalf("ffmpeg: %v %s", err, out)
+	}
+	audioArgs = []string{"--ao=null"}
+	busyUI := make(chan struct{})
+	p := New(func() { <-busyUI })
+	defer func() { close(busyUI); p.Stop() }()
+	if err := p.PlayAudio("MSG", path, 4*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		if err := p.TogglePause(); err != nil {
+			done <- err
+			return
+		}
+		_, err := p.CycleSpeed()
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("pause/speed blocked waiting for the UI: watui would freeze")
+	}
+}

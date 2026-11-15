@@ -37,6 +37,10 @@ type Client struct {
 	changed chan struct{}
 
 	mu       sync.Mutex
+	incoming func(store.Message)
+	onCall   func(CallEvent)
+	calls    map[string]*callState
+	picURLs  map[string]string
 	state    State
 	syncing  bool
 	lastSync time.Time
@@ -50,9 +54,18 @@ func New(wa *whatsmeow.Client, st *store.Store, log waLog.Logger) *Client {
 		log:     log,
 		changed: make(chan struct{}, 1),
 		groups:  map[types.JID]bool{},
+		calls:   map[string]*callState{},
+		picURLs: map[string]string{},
 	}
 	wa.AddEventHandler(c.handle)
 	return c
+}
+
+// OnIncoming is called for every new live message from someone else.
+func (c *Client) OnIncoming(fn func(store.Message)) {
+	c.mu.Lock()
+	c.incoming = fn
+	c.mu.Unlock()
 }
 
 func (c *Client) Changed() <-chan struct{} {
@@ -132,11 +145,27 @@ func (c *Client) handle(evt any) {
 		c.check(c.Store.SetMutedUntil(jid.String(), until))
 		c.notify()
 	case *events.MarkChatAsRead:
+		jid := c.normalize(ctx, e.JID)
 		if e.Action.GetRead() {
-			jid := c.normalize(ctx, e.JID)
 			c.check(c.Store.MarkChatRead(jid.String()))
-			c.notify()
+		} else {
+			c.check(c.Store.SetSyncUnread(jid.String(), 1))
 		}
+		c.notify()
+	case *events.DeleteChat:
+		jid := c.normalize(ctx, e.JID)
+		c.check(c.Store.DeleteChat(jid.String()))
+		c.notify()
+	case *events.CallOffer:
+		c.callOffer(ctx, e.BasicCallMeta, isVideoOffer(e.Data))
+	case *events.CallOfferNotice:
+		c.callOffer(ctx, e.BasicCallMeta, e.Media == "video")
+	case *events.CallAccept:
+		c.callHandled(e.CallID)
+	case *events.CallReject:
+		c.callHandled(e.CallID)
+	case *events.CallTerminate:
+		c.callEnded(e.CallID)
 	case *events.Star:
 		chat := c.normalize(ctx, e.ChatJID)
 		c.check(c.Store.SetStarred(chat.String(), e.MessageID, e.Action.GetStarred()))
@@ -226,7 +255,7 @@ func (c *Client) onMessage(ctx context.Context, e *events.Message, history bool)
 	if !chat.IsEmpty() && chat.Server == types.DefaultUserServer && !e.Info.IsFromMe {
 		c.check(c.Store.SetChatNameIfEmpty(chat.String(), c.contactName(ctx, sender, e.Info.PushName)))
 	}
-	c.check(c.Store.PutMessage(store.Message{
+	msg := store.Message{
 		ChatJID:     chat.String(),
 		ID:          e.Info.ID,
 		SenderJID:   sender.String(),
@@ -242,7 +271,16 @@ func (c *Client) onMessage(ctx context.Context, e *events.Message, history bool)
 		QuoteSender: quoteSender,
 		QuoteText:   quoteText,
 		Forwarded:   ci.GetIsForwarded(),
-	}))
+	}
+	c.check(c.Store.PutMessage(msg))
+	if !history && !e.Info.IsFromMe {
+		c.mu.Lock()
+		fn := c.incoming
+		c.mu.Unlock()
+		if fn != nil {
+			fn(msg)
+		}
+	}
 }
 
 func webStatus(s waWeb.WebMessageInfo_Status) store.Status {
@@ -547,4 +585,75 @@ func (c *Client) SetMuted(ctx context.Context, chatJID string, muted bool) error
 	c.check(c.Store.SetMutedUntil(chatJID, until))
 	c.notify()
 	return nil
+}
+
+func (c *Client) lastKey(chatJID string) (time.Time, *waCommon.MessageKey, error) {
+	last, ok, err := c.Store.LastMessage(chatJID)
+	if err != nil || !ok {
+		return time.Now(), nil, err
+	}
+	return last.TS, &waCommon.MessageKey{
+		RemoteJID: proto.String(chatJID),
+		FromMe:    proto.Bool(last.FromMe),
+		ID:        proto.String(last.ID),
+	}, nil
+}
+
+func (c *Client) MuteFor(ctx context.Context, chatJID string, d time.Duration) error {
+	jid, err := types.ParseJID(chatJID)
+	if err != nil {
+		return err
+	}
+	if err := c.WA.SendAppState(ctx, appstate.BuildMute(jid, true, d)); err != nil {
+		return err
+	}
+	until := store.MutedForever
+	if d > 0 {
+		until = time.Now().Add(d)
+	}
+	c.check(c.Store.SetMutedUntil(chatJID, until))
+	c.notify()
+	return nil
+}
+
+func (c *Client) MarkUnread(ctx context.Context, chatJID string) error {
+	jid, err := types.ParseJID(chatJID)
+	if err != nil {
+		return err
+	}
+	ts, key, err := c.lastKey(chatJID)
+	if err != nil {
+		return err
+	}
+	if err := c.WA.SendAppState(ctx, appstate.BuildMarkChatAsRead(jid, false, ts, key)); err != nil {
+		return err
+	}
+	c.check(c.Store.SetSyncUnread(chatJID, 1))
+	c.notify()
+	return nil
+}
+
+func (c *Client) DeleteChat(ctx context.Context, chatJID string) error {
+	jid, err := types.ParseJID(chatJID)
+	if err != nil {
+		return err
+	}
+	ts, key, err := c.lastKey(chatJID)
+	if err != nil {
+		return err
+	}
+	if err := c.WA.SendAppState(ctx, appstate.BuildDeleteChat(jid, ts, key, true)); err != nil {
+		return err
+	}
+	c.check(c.Store.DeleteChat(chatJID))
+	c.notify()
+	return nil
+}
+
+func (c *Client) LeaveGroup(ctx context.Context, chatJID string) error {
+	jid, err := types.ParseJID(chatJID)
+	if err != nil {
+		return err
+	}
+	return c.WA.LeaveGroup(ctx, jid)
 }

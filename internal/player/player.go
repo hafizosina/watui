@@ -91,7 +91,7 @@ func (p *Player) PlayAudio(msgID, path string, duration time.Duration) error {
 		_ = os.Remove(sock)
 		p.notify()
 	}()
-	p.notify()
+	go p.notify()
 	return nil
 }
 
@@ -135,7 +135,7 @@ func (p *Player) TogglePause() error {
 	}
 	p.paused = !p.paused
 	p.mu.Unlock()
-	p.notify()
+	go p.notify()
 	return nil
 }
 
@@ -154,7 +154,7 @@ func (p *Player) CycleSpeed() (float64, error) {
 	p.since = time.Now()
 	p.speed = next
 	p.mu.Unlock()
-	p.notify()
+	go p.notify()
 	return next, nil
 }
 

@@ -154,6 +154,25 @@ func (p *Profile) SetLabel(label string) error {
 	return os.WriteFile(filepath.Join(p.Dir, "label"), []byte(label+"\n"), 0o600)
 }
 
+const notifyOffFile = "notify-off"
+
+// NotifyEnabled reports whether desktop notifications are on for this profile.
+func (p *Profile) NotifyEnabled() bool {
+	_, err := os.Stat(filepath.Join(p.Dir, notifyOffFile))
+	return err != nil
+}
+
+func (p *Profile) SetNotify(on bool) error {
+	path := filepath.Join(p.Dir, notifyOffFile)
+	if on {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	return os.WriteFile(path, nil, 0o600)
+}
+
 func (p *Profile) Reconnect() error {
 	p.WA.WA.Disconnect()
 	return p.WA.WA.Connect()
