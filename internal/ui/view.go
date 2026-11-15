@@ -55,6 +55,16 @@ func (m Model) View() string {
 		)
 	}
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	if m.mode == modeInsert && m.info == nil && !m.showHelp {
+		if _, query, list := m.emojiSuggestions(); len(list) > 0 {
+			box, bw, bh := m.emojiView(query, list)
+			body = overlay(body, box, min(listW+2, max(0, m.width-bw)), max(0, mainH-m.composeH()-bh))
+		}
+	}
+	if m.stickers != nil {
+		box, bw, bh := m.stickerView()
+		body = overlay(body, box, max(0, (m.width-bw)/2), max(0, (mainH-bh)/2))
+	}
 	if m.menu != nil {
 		box, bw, bh := m.menuView()
 		body = overlay(body, box, max(0, (m.width-bw)/2), max(0, (mainH-bh)/2))
@@ -199,7 +209,27 @@ func (m Model) listView(w int) string {
 	return strings.Join(rows, "\n")
 }
 
+func (m Model) specialRow(c store.Chat, selected bool, w int) string {
+	bg := lipgloss.NewStyle()
+	if selected {
+		bg = bg.Background(colHighlight)
+		if m.focus != focusList || m.mode == modeInsert {
+			bg = bg.Background(colGutter)
+		}
+	}
+	text, hint := iconArchive+"  Archived", fmt.Sprintf("%d ", c.Unread)
+	if c.JID == rowBack {
+		text, hint = "←  Back to chats", ""
+	}
+	line := bg.Foreground(colBlue).Bold(true).Render(" "+text) + bg.Render(strings.Repeat(" ", max(1, w-lipgloss.Width(text)-1-lipgloss.Width(hint)))) + bg.Foreground(colComment).Render(hint)
+	sub := bg.Foreground(colComment).Render(" " + map[bool]string{true: "enter to return", false: "enter to open · A also toggles"}[c.JID == rowBack])
+	return line + "\n" + padRow(sub, w, bg)
+}
+
 func (m Model) chatRow(c store.Chat, selected bool, w int) string {
+	if isSpecialRow(c.JID) {
+		return m.specialRow(c, selected, w)
+	}
 	var bg lipgloss.TerminalColor = lipgloss.NoColor{}
 	if selected {
 		bg = colHighlight
@@ -442,9 +472,8 @@ func (m Model) renderBody(msg store.Message, w int, showImage bool, q media.Qual
 	if msg.MediaType == wa.MediaDoc {
 		return m.documentLines(msg, text, w)
 	}
-	if strings.HasPrefix(text, "[missed ") && strings.HasSuffix(text, " call]") {
-		label := strings.TrimSuffix(strings.TrimPrefix(text, "[missed "), "]")
-		return "   " + lipgloss.NewStyle().Foreground(colRed).Render(iconPhone+" Missed "+label)
+	if line, ok := callLine(text); ok {
+		return "   " + line
 	}
 	var picture []string
 	if showImage {
@@ -590,6 +619,10 @@ func (m Model) bottomLine() string {
 		return styleKey.Render(":") + m.prompt.View()
 	case modeSearch:
 		return styleKey.Render("/") + m.prompt.View()
+	}
+	if banner, ok := m.ringBanner(); ok {
+		b := lipgloss.NewStyle().Background(colRed).Foreground(colBgDark).Bold(true)
+		return b.Render(ansi.Truncate(banner, m.width, "…") + strings.Repeat(" ", max(0, m.width-lipgloss.Width(banner))))
 	}
 	right := modeStyle(m.mode).Render(m.mode.String())
 	if m.mode == modeInsert {
@@ -740,4 +773,41 @@ func shortTime(t time.Time) string {
 		return t.Local().Format("Mon")
 	}
 	return t.Local().Format("02/01/06")
+}
+
+func padRow(s string, w int, bg lipgloss.Style) string {
+	return s + bg.Render(strings.Repeat(" ", max(0, w-lipgloss.Width(s))))
+}
+
+func callLine(text string) (string, bool) {
+	if !strings.HasPrefix(text, "[") || !strings.HasSuffix(text, " call]") {
+		return "", false
+	}
+	inner := strings.TrimSuffix(strings.TrimPrefix(text, "["), "]")
+	switch {
+	case strings.HasPrefix(inner, "missed "):
+		return lipgloss.NewStyle().Foreground(colRed).Render(iconPhone + " Missed " + strings.TrimPrefix(inner, "missed ")), true
+	case strings.HasPrefix(inner, "declined "):
+		return lipgloss.NewStyle().Foreground(colOrange).Render(iconPhone + " Declined " + strings.TrimPrefix(inner, "declined ")), true
+	case inner == "voice call" || inner == "video call":
+		return lipgloss.NewStyle().Foreground(colGreen).Render(iconPhone + " " + strings.ToUpper(inner[:1]) + inner[1:] + " · answered on another device"), true
+	}
+	return "", false
+}
+
+func (m Model) emojiView(query string, list []emojiEntry) (string, int, int) {
+	w := 32
+	var rows []string
+	for i, e := range list {
+		sel := i == min(m.emojiSel, len(list)-1)
+		bg := lipgloss.NewStyle()
+		if sel {
+			bg = bg.Background(colHighlight)
+		}
+		code := ansi.Truncate(":"+e.code+":", w-8, "…")
+		row := bg.Render(" "+e.glyph+"  ") + bg.Foreground(colFg).Bold(sel).Render(code)
+		rows = append(rows, row+bg.Render(strings.Repeat(" ", max(0, w-2-lipgloss.Width(row)))))
+	}
+	h := len(rows) + 2
+	return panel("Emoji :"+query, "tab insert · ^n/^p", strings.Join(rows, "\n"), w, h, true), w, h
 }

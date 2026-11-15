@@ -161,9 +161,9 @@ func (c *Client) handle(evt any) {
 	case *events.CallOfferNotice:
 		c.callOffer(ctx, e.BasicCallMeta, e.Media == "video")
 	case *events.CallAccept:
-		c.callHandled(e.CallID)
+		c.callSettled(e.CallID, OutcomeAnswered)
 	case *events.CallReject:
-		c.callHandled(e.CallID)
+		c.callSettled(e.CallID, OutcomeDeclined)
 	case *events.CallTerminate:
 		c.callEnded(e.CallID)
 	case *events.Star:

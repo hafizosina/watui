@@ -462,3 +462,37 @@ func TestMuteIcons(t *testing.T) {
 		t.Error("messages title should say muted next to the icon")
 	}
 }
+
+func TestArchivedRow(t *testing.T) {
+	m := testModel(t)
+	if err := m.wa.Store.SetArchived("628111@s.whatsapp.net", true); err != nil {
+		t.Fatal(err)
+	}
+	m = step(m, tea.WindowSizeMsg{Width: 110, Height: 34}, ChangedMsg{})
+	if len(m.chats) != 2 || m.chats[0].JID != rowArchived || m.chats[0].Unread != 1 {
+		t.Fatalf("chat list should start with an Archived (1) row, got %+v", m.chats)
+	}
+	if m.cursor != 1 {
+		t.Fatal("the cursor should start on the first real chat, not the Archived row")
+	}
+	if !strings.Contains(m.View(), "Archived") {
+		t.Fatal("Archived row should be visible")
+	}
+	m = step(m, key("k"), key("enter"))
+	if !m.showArchived || m.chats[0].JID != rowBack || m.chats[1].JID != "628111@s.whatsapp.net" {
+		t.Fatalf("enter on Archived should show archived chats with a Back row, got %+v", m.chats)
+	}
+	m = step(m, key("k"), key("enter"))
+	if m.showArchived {
+		t.Fatal("enter on Back should return to normal chats")
+	}
+	m = step(m, key("k"), key(" "))
+	if m.menu != nil {
+		t.Fatal("the Archived row has no chat menu")
+	}
+	m = step(m, key("J"))
+	if m.openJID != "1203630@g.us" {
+		t.Fatalf("J from the Archived row should open the first real chat, got %q", m.openJID)
+	}
+	checkFrame(t, m.View(), 110, 34)
+}

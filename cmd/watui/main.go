@@ -155,12 +155,20 @@ func run() error {
 	}
 
 	var prog *tea.Program
-	notifier := notify.New(func(key string) {
-		if prog != nil {
-			name, jid := ui.SplitNoteKey(key)
-			prog.Send(ui.OpenChatMsg{Profile: name, JID: jid})
+	notifier := notify.New(func(key, action string) {
+		if prog == nil {
+			return
 		}
+		name, jid := ui.SplitNoteKey(key)
+		if callID, ok := strings.CutPrefix(action, "decline:"); ok {
+			prog.Send(ui.DeclineCallMsg{Profile: name, CallID: callID})
+			return
+		}
+		prog.Send(ui.OpenChatMsg{Profile: name, JID: jid})
 	})
+	if cache, err := os.UserCacheDir(); err == nil {
+		notifier.SetSound(cfg.NotifySound, filepath.Join(cache, "watui", "sounds"))
+	}
 	watch := func(p *profile.Profile) {
 		name := p.Name
 		p.WA.OnCall(func(ev wa.CallEvent) {

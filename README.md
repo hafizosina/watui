@@ -6,6 +6,17 @@ It uses [whatsmeow](https://github.com/tulir/whatsmeow) to talk to WhatsApp. Tha
 
 > ⚠️ Unofficial client. Normal personal use has no known bans, but using it goes against WhatsApp's terms, so there is a small risk. Don't use it for bulk messages.
 
+## Screenshots
+
+Rendered from demo data (`make screenshots`). Pictures, stickers and GIFs are drawn by kitty in the real app, so they don't appear here.
+
+| | |
+|---|---|
+| ![Chat](docs/screenshots/01-chat.png) **Chat** — lazygit-style boxes, replies, reactions, voice notes, files, forwarded messages | ![Emoji](docs/screenshots/02-compose-emoji.png) **Compose** — vim editor with `:emoji` completion |
+| ![Message menu](docs/screenshots/03-message-menu.png) **Message menu** — `Space` on a message | ![Chat menu](docs/screenshots/04-chat-menu.png) **Chat menu** — `Space` on a chat |
+| ![Group info](docs/screenshots/05-group-info.png) **Group info** — members, admins, description | ![Profiles](docs/screenshots/06-profiles.png) **Profiles** — several WhatsApp accounts |
+| ![Keybindings](docs/screenshots/07-help.png) **Keybindings** — `?` | |
+
 ## Install
 
 You need Go 1.23+ (`/usr/local/go`) and gcc (for SQLite).
@@ -57,7 +68,7 @@ The screen has two panes: **chat list** (left) and **messages** (right). `Tab` s
 | | `Enter` | open chat |
 | | `i` | open chat and type |
 | | `/` | search chats |
-| | `A` | show archived chats |
+| | `A` | show archived chats (or `Enter` on the ** Archived (N)** row at the top; **← Back to chats** returns) |
 | | `n` | new chat / new group (also `:new`) |
 | | `Space` | chat menu: Open · Pin · Mute (8h / 1 week / always) · Archive · Mark read/unread · Copy number · Leave group · Delete chat |
 | NORMAL (messages) | `j` / `k` | select next / previous message |
@@ -93,6 +104,11 @@ Shown in the [3] box in place of the messages (`Esc` goes back), with the profil
 | Messages → `Space` on someone's message in a group → **Sender info** | that person's details |
 
 In group info: `j`/`k` move through members, `Enter` opens a chat with them, `Space` shows their details, `y` copies their number. In contact info, `Enter` opens the chat. No picture? A colored avatar with initials is shown instead.
+
+### Emoji and stickers
+
+- **Emoji:** in INSERT, type `:` and a few letters (`:joy`, `:thumbsup`, `:pray`) — a popup suggests emoji (popular ones first). `Tab` inserts, `Ctrl+n`/`Ctrl+p` move, `Esc` hides it. Times like `10:30` don't trigger it.
+- **Stickers:** `Ctrl+t` (in Messages or Compose) or `:sticker` opens a grid of stickers you received or sent recently (animated ones move). `h/j/k/l` or `Ctrl+n`/`Ctrl+p` to pick, `Enter` sends it to the open chat.
 
 ### New chat and new group
 
@@ -139,13 +155,17 @@ image_width = 40       # biggest picture size, in terminal cells
 image_height = 15
 collapse_lines = 15    # long messages fold after this many lines (0 = never)
 notify = on            # on | private (sender only) | off
+notify_sound = watui   # watui (own chime; calls ring) | system | off | /path/to/sound.ogg
 ```
 
 ### Desktop notifications
 
 New messages pop up via `notify-send` (one notification per chat, updated in place). Clicking it opens that chat in watui (switching profile if needed) and brings the tmux pane and kitty window to the front. No notification for muted or archived chats, for the chat you are reading while watui is focused, or for old messages arriving after a reconnect. `notify = private` shows only who wrote; `:set notify=off` mutes them for the session.
 
-Calls: watui can't take calls, but an incoming voice/video (or group) call shows a notification ("answer on your phone"). If nobody answers on any device, it turns into "Missed voice call" and a red missed-call line is added to that chat (unread, like on the phone).
+Calls: watui can't answer calls (whatsmeow has no audio/video), but:
+
+- a ringing call shows a red banner at the bottom (`Ctrl+x` declines it) and a notification with a **Decline** button;
+- every call is logged in the chat: green *Voice call · answered on another device*, orange *Declined*, red *Missed* (missed ones count as unread).
 
 | `images` | What you see |
 |---|---|

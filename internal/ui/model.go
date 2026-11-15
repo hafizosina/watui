@@ -105,6 +105,10 @@ type Model struct {
 	shownImages  map[string]media.Quality
 	pendingGroup []string
 	info         *infoState
+	ringing      *ringing
+	emojiSel     int
+	stickers     *stickerPicker
+	emojiHidden  string
 	expanded     map[string]bool
 	foldable     map[string]bool
 
@@ -202,6 +206,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, viewFileCmd(msg.path)
 	case CallMsg:
 		return m.call(msg)
+	case DeclineCallMsg:
+		return m.declineCall(msg.Profile, msg.CallID)
 	case IncomingMsg:
 		return m.incoming(msg)
 	case OpenChatMsg:
@@ -304,6 +310,21 @@ func (m *Model) applyFilter() {
 	}
 	needle := strings.ToLower(m.filter)
 	m.chats = m.chats[:0:0]
+	if needle == "" {
+		if m.showArchived {
+			m.chats = append(m.chats, store.Chat{JID: rowBack})
+		} else {
+			n := 0
+			for _, c := range m.allChats {
+				if c.Archived {
+					n++
+				}
+			}
+			if n > 0 {
+				m.chats = append(m.chats, store.Chat{JID: rowArchived, Unread: n})
+			}
+		}
+	}
 	for _, c := range m.allChats {
 		if c.Archived != m.showArchived && needle == "" {
 			continue
@@ -314,6 +335,9 @@ func (m *Model) applyFilter() {
 		m.chats = append(m.chats, c)
 	}
 	m.cursor = 0
+	if len(m.chats) > 1 && isSpecialRow(m.chats[0].JID) {
+		m.cursor = 1
+	}
 	for i, c := range m.chats {
 		if c.JID == selected {
 			m.cursor = i
@@ -321,6 +345,22 @@ func (m *Model) applyFilter() {
 		}
 	}
 	m.clampCursor()
+}
+
+const (
+	rowArchived = "__archived__"
+	rowBack     = "__back__"
+)
+
+func isSpecialRow(jid string) bool {
+	return jid == rowArchived || jid == rowBack
+}
+
+func (m *Model) toggleArchived() {
+	m.showArchived = !m.showArchived
+	m.filter = ""
+	m.cursor = 0
+	m.applyFilter()
 }
 
 func (m *Model) clampCursor() {
@@ -347,10 +387,14 @@ func (m Model) listRows() int {
 }
 
 func (m Model) currentChat() (store.Chat, bool) {
-	if m.cursor < len(m.chats) {
+	if m.cursor < len(m.chats) && !isSpecialRow(m.chats[m.cursor].JID) {
 		return m.chats[m.cursor], true
 	}
 	return store.Chat{}, false
+}
+
+func (m Model) onSpecialRow() bool {
+	return m.cursor < len(m.chats) && isSpecialRow(m.chats[m.cursor].JID)
 }
 
 func (m Model) openChat() (store.Chat, bool) {

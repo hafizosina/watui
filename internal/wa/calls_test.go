@@ -63,10 +63,20 @@ func TestCalls(t *testing.T) {
 	c.handle(&events.CallOffer{BasicCallMeta: meta("B"), Data: &waBinary.Node{Tag: "offer", Content: []waBinary.Node{{Tag: "audio"}}}})
 	c.handle(&events.CallAccept{BasicCallMeta: meta("B")})
 	c.handle(&events.CallTerminate{BasicCallMeta: meta("B")})
-	if len(got) != 2 || got[0].Video || got[1].Kind != CallHandled {
-		t.Fatalf("answered voice call: want ringing+handled, got %+v", got)
+	if len(got) != 3 || got[0].Video || got[1].Kind != CallHandled || got[2].Outcome != OutcomeAnswered {
+		t.Fatalf("answered voice call: want ringing+handled+ended(answered), got %+v", got)
 	}
-	if msgs, _ := c.Store.Messages(caller.String(), 10); len(msgs) != 1 {
-		t.Fatal("an answered call must not add a missed-call message")
+	msgs, _ = c.Store.Messages(caller.String(), 10)
+	if len(msgs) != 2 || msgs[1].Text != "[voice call]" || !msgs[1].Read {
+		t.Fatalf("an answered call should be logged as a read [voice call], got %+v", msgs)
+	}
+
+	got = nil
+	c.handle(&events.CallOffer{BasicCallMeta: meta("C"), Data: videoOffer})
+	c.handle(&events.CallReject{BasicCallMeta: meta("C")})
+	c.handle(&events.CallTerminate{BasicCallMeta: meta("C")})
+	msgs, _ = c.Store.Messages(caller.String(), 10)
+	if len(msgs) != 3 || msgs[2].Text != "[declined video call]" {
+		t.Fatalf("a call declined on the phone should be logged as declined, got %+v", msgs)
 	}
 }

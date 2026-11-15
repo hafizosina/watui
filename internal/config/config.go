@@ -24,7 +24,8 @@ type Config struct {
 
 	CollapseLines int
 
-	Notify NotifyMode
+	Notify      NotifyMode
+	NotifySound string
 }
 
 type NotifyMode string
@@ -43,7 +44,8 @@ func Default() Config {
 
 		CollapseLines: 15,
 
-		Notify: NotifyOn,
+		Notify:      NotifyOn,
+		NotifySound: "watui",
 	}
 }
 
@@ -67,6 +69,10 @@ collapse_lines = 15
 #   private  sender only ("New message"), no text on screen
 #   off      none
 notify = on
+
+# Notification sound: watui (built-in chime; calls ring), system (desktop default), off,
+# or a path to any .ogg/.wav file.
+notify_sound = watui
 `
 
 func Path() (string, error) {
@@ -146,6 +152,16 @@ func (c *Config) Set(assignment string) error {
 			return fmt.Errorf("notify must be on, private or off, got %q", value)
 		}
 		c.Notify = mode
+	case "notify_sound":
+		if value == "" {
+			return fmt.Errorf("notify_sound needs a value: watui, system, off or a file path")
+		}
+		if value != "watui" && value != "system" && value != "off" {
+			if _, err := os.Stat(value); err != nil {
+				return fmt.Errorf("notify_sound file %q: %w", value, err)
+			}
+		}
+		c.NotifySound = value
 	case "collapse_lines":
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 0 {

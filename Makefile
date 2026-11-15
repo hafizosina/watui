@@ -4,7 +4,7 @@ APP_DIR := $(HOME)/App/WaTui
 VERSION := $(shell git describe --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: build test deploy install run dev
+.PHONY: build test deploy install run dev screenshots
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o bin/watui ./cmd/watui
@@ -26,3 +26,6 @@ run: build
 
 dev:
 	watuidev
+
+screenshots:
+	./scripts/screenshots.sh

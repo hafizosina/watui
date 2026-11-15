@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -151,16 +152,72 @@ func (m Model) callNote(c CallMsg) (notify.Note, bool) {
 	if len(m.profiles) > 1 {
 		title = "[" + p.Label() + "] " + title
 	}
-	body := "Incoming " + kind + " — answer on your phone"
+	note := notify.Note{Key: NoteKey(p.Name, c.Ev.Chat), Title: title, Body: "Incoming " + kind + " — answer on your phone", Sound: notify.SoundCall}
 	if c.Ev.Kind == wa.CallMissed {
-		body = "Missed " + kind
+		note.Body = "Missed " + kind
+		note.Sound = notify.SoundMessage
+	} else {
+		note.Actions = []notify.Action{{Name: "decline:" + c.Ev.CallID, Label: "Decline"}}
 	}
-	return notify.Note{Key: NoteKey(p.Name, c.Ev.Chat), Title: title, Body: body}, true
+	return note, true
+}
+
+type DeclineCallMsg struct {
+	Profile string
+	CallID  string
+}
+
+type ringing struct {
+	profile string
+	ev      wa.CallEvent
+	until   time.Time
 }
 
 func (m Model) call(c CallMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case c.Ev.Kind == wa.CallRinging && time.Since(c.Ev.TS) < ringMaxAge:
+		m.ringing = &ringing{profile: c.Profile, ev: c.Ev, until: time.Now().Add(90 * time.Second)}
+	case m.ringing != nil && m.ringing.ev.CallID == c.Ev.CallID:
+		m.ringing = nil
+	}
 	if note, ok := m.callNote(c); ok && m.opts.Notifier != nil {
 		m.opts.Notifier.Send(note)
 	}
 	return m, nil
+}
+
+func (m Model) declineCall(profileName, callID string) (tea.Model, tea.Cmd) {
+	p, _ := m.profileByName(profileName)
+	if p == nil {
+		return m, nil
+	}
+	if m.ringing != nil && m.ringing.ev.CallID == callID {
+		m.ringing = nil
+	}
+	return m, m.actionCmd("call declined", func(ctx context.Context) error { return p.WA.DeclineCall(ctx, callID) })
+}
+
+func (m Model) ringBanner() (string, bool) {
+	r := m.ringing
+	if r == nil || time.Now().After(r.until) {
+		return "", false
+	}
+	p, _ := m.profileByName(r.profile)
+	if p == nil {
+		return "", false
+	}
+	kind := "voice call"
+	if r.ev.Video {
+		kind = "video call"
+	}
+	who := sanitize(p.WA.ContactName(r.ev.From, ""))
+	if r.ev.Group {
+		if chat, ok, _ := p.WA.Store.Chat(r.ev.Chat); ok {
+			who += " @ " + sanitize(p.WA.ChatName(chat))
+		}
+	}
+	if len(m.profiles) > 1 {
+		who = "[" + p.Label() + "] " + who
+	}
+	return " " + iconPhone + "  Incoming " + kind + " from " + who + "  ·  ctrl+x decline  ·  answer on your phone ", true
 }

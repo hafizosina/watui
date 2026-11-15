@@ -9,17 +9,52 @@ import (
 	"sync"
 )
 
+type Action struct {
+	Name  string
+	Label string
+}
+
+type SoundKind int
+
+const (
+	SoundMessage SoundKind = iota
+	SoundCall
+)
+
 type Note struct {
-	Key   string
-	Title string
-	Body  string
+	Key     string
+	Title   string
+	Body    string
+	Actions []Action
+	Sound   SoundKind
 }
 
 type Notifier struct {
-	onOpen func(key string)
+	onOpen func(key, action string)
 
 	mu  sync.Mutex
 	ids map[string]uint32
+
+	soundMode    string
+	messageSound string
+	callSound    string
+}
+
+// SetSound picks how notifications sound: "watui" (built-in chimes), "system", "off", or a file path.
+func (n *Notifier) SetSound(mode, cacheDir string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.soundMode = mode
+	n.messageSound, n.callSound = "", ""
+	switch mode {
+	case "system", "off", "":
+	case "watui":
+		if msg, call, err := SoundFiles(cacheDir); err == nil {
+			n.messageSound, n.callSound = msg, call
+		}
+	default:
+		n.messageSound, n.callSound = mode, mode
+	}
 }
 
 func Available() bool {
@@ -27,7 +62,7 @@ func Available() bool {
 	return err == nil
 }
 
-func New(onOpen func(key string)) *Notifier {
+func New(onOpen func(key, action string)) *Notifier {
 	return &Notifier{onOpen: onOpen, ids: map[string]uint32{}}
 }
 
@@ -40,8 +75,26 @@ func (n *Notifier) Send(note Note) {
 	id := n.ids[note.Key]
 	n.mu.Unlock()
 
-	args := []string{"--app-name=watui", "--icon=mail-message-new", "--print-id",
-		"--hint=string:sound-name:message-new-instant", "--action=default=Open"}
+	n.mu.Lock()
+	mode := n.soundMode
+	sound := n.messageSound
+	if note.Sound == SoundCall {
+		sound = n.callSound
+	}
+	n.mu.Unlock()
+	args := []string{"--app-name=watui", "--icon=mail-message-new", "--print-id", "--action=default=Open"}
+	switch {
+	case mode == "system" || (mode != "off" && sound == ""):
+		args = append(args, "--hint=string:sound-name:message-new-instant")
+	default:
+		args = append(args, "--hint=boolean:suppress-sound:true")
+	}
+	if mode != "off" && mode != "system" {
+		Play(sound)
+	}
+	for _, a := range note.Actions {
+		args = append(args, "--action="+a.Name+"="+a.Label)
+	}
 	if id != 0 {
 		args = append(args, "--replace-id="+strconv.FormatUint(uint64(id), 10))
 	}
@@ -69,8 +122,8 @@ func (n *Notifier) Send(note Note) {
 					continue
 				}
 			}
-			if line == "default" && n.onOpen != nil {
-				n.onOpen(note.Key)
+			if line != "" && n.onOpen != nil {
+				n.onOpen(note.Key, line)
 			}
 		}
 		_ = cmd.Wait()

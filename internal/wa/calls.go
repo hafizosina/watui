@@ -2,6 +2,7 @@ package wa
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	waBinary "go.mau.fi/whatsmeow/binary"
@@ -18,26 +19,44 @@ const (
 	CallHandled
 )
 
+type CallOutcome string
+
+const (
+	OutcomeMissed   CallOutcome = "missed"
+	OutcomeAnswered CallOutcome = "answered"
+	OutcomeDeclined CallOutcome = "declined"
+)
+
 type CallEvent struct {
-	Kind   CallKind
-	CallID string
-	From   string
-	Chat   string
-	Video  bool
-	Group  bool
-	TS     time.Time
+	Kind    CallKind
+	CallID  string
+	From    string
+	Chat    string
+	Video   bool
+	Group   bool
+	TS      time.Time
+	Outcome CallOutcome
 }
 
 type callState struct {
 	ev      CallEvent
-	handled bool
+	outcome CallOutcome
+	caller  types.JID
 }
 
-func callText(video bool) string {
+// CallText is the chat line stored for a finished call.
+func CallText(outcome CallOutcome, video bool) string {
+	kind := "voice call"
 	if video {
-		return "[missed video call]"
+		kind = "video call"
 	}
-	return "[missed voice call]"
+	switch outcome {
+	case OutcomeAnswered:
+		return "[" + kind + "]"
+	case OutcomeDeclined:
+		return "[declined " + kind + "]"
+	}
+	return "[missed " + kind + "]"
 }
 
 func isVideoOffer(data *waBinary.Node) bool {
@@ -48,7 +67,7 @@ func isVideoOffer(data *waBinary.Node) bool {
 	return ok
 }
 
-// OnCall is called when a call rings, is missed, or is picked up elsewhere.
+// OnCall is called when a call rings, is missed, or is picked up / declined.
 func (c *Client) OnCall(fn func(CallEvent)) {
 	c.mu.Lock()
 	c.onCall = fn
@@ -65,10 +84,11 @@ func (c *Client) emitCall(ev CallEvent) {
 }
 
 func (c *Client) callOffer(ctx context.Context, meta types.BasicCallMeta, video bool) {
-	from := c.normalize(ctx, meta.From)
+	caller := meta.From
 	if !meta.CallCreator.IsEmpty() {
-		from = c.normalize(ctx, meta.CallCreator)
+		caller = meta.CallCreator
 	}
+	from := c.normalize(ctx, caller)
 	chat := from
 	group := !meta.GroupJID.IsEmpty()
 	if group {
@@ -80,21 +100,21 @@ func (c *Client) callOffer(ctx context.Context, meta types.BasicCallMeta, video 
 		c.mu.Unlock()
 		return
 	}
-	c.calls[meta.CallID] = &callState{ev: ev}
+	c.calls[meta.CallID] = &callState{ev: ev, caller: meta.From}
 	c.mu.Unlock()
 	c.emitCall(ev)
 }
 
-func (c *Client) callHandled(id string) {
+func (c *Client) callSettled(id string, outcome CallOutcome) {
 	c.mu.Lock()
 	st, ok := c.calls[id]
-	if ok {
-		st.handled = true
+	if ok && st.outcome == "" {
+		st.outcome = outcome
 	}
 	c.mu.Unlock()
 	if ok {
 		ev := st.ev
-		ev.Kind = CallHandled
+		ev.Kind, ev.Outcome = CallHandled, outcome
 		c.emitCall(ev)
 	}
 }
@@ -104,20 +124,45 @@ func (c *Client) callEnded(id string) {
 	st, ok := c.calls[id]
 	delete(c.calls, id)
 	c.mu.Unlock()
-	if !ok || st.handled {
+	if !ok {
 		return
 	}
 	ev := st.ev
-	ev.Kind = CallMissed
+	ev.Outcome = st.outcome
+	if ev.Outcome == "" {
+		ev.Outcome = OutcomeMissed
+	}
 	c.check(c.Store.EnsureChat(ev.Chat, ev.Group))
 	c.check(c.Store.PutMessage(store.Message{
 		ChatJID:   ev.Chat,
 		ID:        "call-" + ev.CallID,
 		SenderJID: ev.From,
 		TS:        ev.TS,
-		Text:      callText(ev.Video),
+		Text:      CallText(ev.Outcome, ev.Video),
 		Status:    store.StatusSent,
+		Read:      ev.Outcome != OutcomeMissed,
 	}))
 	c.notify()
+	if ev.Outcome == OutcomeMissed {
+		ev.Kind = CallMissed
+	} else {
+		ev.Kind = CallHandled
+	}
 	c.emitCall(ev)
+}
+
+// DeclineCall rejects a ringing call; the caller sees it as declined.
+func (c *Client) DeclineCall(ctx context.Context, callID string) error {
+	c.mu.Lock()
+	st, ok := c.calls[callID]
+	c.mu.Unlock()
+	if !ok {
+		return errors.New("that call already ended")
+	}
+	if err := c.WA.RejectCall(ctx, st.caller, callID); err != nil {
+		return err
+	}
+	c.callSettled(callID, OutcomeDeclined)
+	c.callEnded(callID)
+	return nil
 }

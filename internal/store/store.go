@@ -386,6 +386,26 @@ func (s *Store) SetReaction(chatJID, id, sender, emoji string) error {
 	return err
 }
 
+// RecentMedia returns the newest messages of one media kind, across all chats.
+func (s *Store) RecentMedia(kind string, limit int) ([]Message, error) {
+	rows, err := s.db.Query(`SELECT chat_jid, id, ts FROM messages WHERE media_type = ? AND deleted = 0 AND media IS NOT NULL ORDER BY ts DESC LIMIT ?`, kind, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Message
+	for rows.Next() {
+		var m Message
+		var ts int64
+		if err := rows.Scan(&m.ChatJID, &m.ID, &ts); err != nil {
+			return nil, err
+		}
+		m.TS = time.Unix(ts, 0)
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) Media(chatJID, id string) (string, []byte, error) {
 	var kind string
 	var data []byte

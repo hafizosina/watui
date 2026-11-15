@@ -15,6 +15,16 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.menu != nil {
 		return m.menuKey(k)
 	}
+	if m.stickers != nil {
+		return m.stickerKey(k.String())
+	}
+	if k.String() == "ctrl+t" && m.focus == focusChat && m.info == nil && m.mode != modeCommand && m.mode != modeSearch {
+		m.openStickers()
+		return m, nil
+	}
+	if k.String() == "ctrl+x" && m.ringing != nil && m.mode != modeCommand && m.mode != modeSearch {
+		return m.declineCall(m.ringing.profile, m.ringing.ev.CallID)
+	}
 	if m.mode == modeNormal || m.mode == modeInsert {
 		switch k.String() {
 		case "ctrl+h":
@@ -80,7 +90,36 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.normalKey(k)
 }
 
+func (m Model) emojiSuggestions() (int, string, []emojiEntry) {
+	if m.input.mode != vimInsert {
+		return 0, "", nil
+	}
+	from, query, ok := m.input.emojiQuery()
+	if !ok || query == m.emojiHidden {
+		return 0, "", nil
+	}
+	return from, query, emojiMatches(query, 8)
+}
+
 func (m Model) insertKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if from, query, list := m.emojiSuggestions(); len(list) > 0 {
+		switch k.String() {
+		case "tab", "ctrl+y":
+			e := list[min(m.emojiSel, len(list)-1)]
+			m.input.replaceBeforeCursor(from, e.glyph)
+			m.emojiSel = 0
+			return m, nil
+		case "ctrl+n", "down":
+			m.emojiSel = (m.emojiSel + 1) % len(list)
+			return m, nil
+		case "ctrl+p", "up", "shift+tab":
+			m.emojiSel = (m.emojiSel - 1 + len(list)) % len(list)
+			return m, nil
+		case "esc", "ctrl+[":
+			m.emojiHidden = query
+			return m, nil
+		}
+	}
 	switch k.String() {
 	case "ctrl+s":
 		text := strings.TrimSpace(m.input.Value())
@@ -96,6 +135,7 @@ func (m Model) insertKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.input.HandleKey(k) == editLeave {
 		m.enterNormal()
 	}
+	m.emojiSel = 0
 	return m, nil
 }
 
@@ -233,6 +273,10 @@ func (m Model) listKey(key string) (tea.Model, tea.Cmd) {
 	case "ctrl+b", "pgup":
 		m.cursor -= m.listRows()
 	case "enter", "right", "o":
+		if m.onSpecialRow() {
+			m.toggleArchived()
+			return m, nil
+		}
 		if c, ok := m.currentChat(); ok {
 			m.open(c.JID)
 			m.focus = focusChat
@@ -256,13 +300,7 @@ func (m Model) listKey(key string) (tea.Model, tea.Cmd) {
 		m.openChatMenu()
 		return m, nil
 	case "A":
-		m.showArchived = !m.showArchived
-		m.filter = ""
-		m.cursor = 0
-		m.applyFilter()
-		if m.showArchived {
-			m.setFlash("showing archived chats (A to go back)", false)
-		}
+		m.toggleArchived()
 	}
 	m.clampCursor()
 	return m, nil
@@ -380,7 +418,16 @@ func (m Model) stepChat(delta int) (tea.Model, tea.Cmd) {
 	}
 	m.cursor += delta
 	m.clampCursor()
-	c, _ := m.currentChat()
+	if m.onSpecialRow() {
+		if delta < 0 || len(m.chats) < 2 {
+			return m, nil
+		}
+		m.cursor++
+	}
+	c, ok := m.currentChat()
+	if !ok {
+		return m, nil
+	}
 	m.open(c.JID)
 	m.focus = focusChat
 	return m, m.markReadCmd()
@@ -398,6 +445,10 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "new":
 		m.openNewChat()
+		return m, nil
+	case "sticker", "stickers":
+		m.focus = focusChat
+		m.openStickers()
 		return m, nil
 	case "info":
 		if m.openJID == "" {
@@ -459,9 +510,7 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 		m.setFlash(fmt.Sprintf("speed %.1g×", speed), false)
 		return m, nil
 	case "archived":
-		m.showArchived = !m.showArchived
-		m.cursor = 0
-		m.applyFilter()
+		m.toggleArchived()
 		return m, nil
 	case "read":
 		if m.openJID == "" {

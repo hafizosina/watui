@@ -117,3 +117,40 @@ func TestCallNotes(t *testing.T) {
 		t.Error("missed call should render as a red Missed voice call line")
 	}
 }
+
+func TestRingingBanner(t *testing.T) {
+	m := step(testModel(t), tea.WindowSizeMsg{Width: 120, Height: 34}, ChangedMsg{})
+	ev := wa.CallEvent{Kind: wa.CallRinging, CallID: "R1", From: "628111@s.whatsapp.net", Chat: "628111@s.whatsapp.net", Video: true, TS: time.Now()}
+	m = step(m, CallMsg{Profile: profile.Default, Ev: ev})
+	frame := m.View()
+	if !strings.Contains(frame, "Incoming video call from +628111") || !strings.Contains(frame, "ctrl+x decline") {
+		t.Fatal("a ringing call should show the banner with ctrl+x decline")
+	}
+	checkFrame(t, frame, 120, 34)
+	note, _ := m.callNote(CallMsg{Profile: profile.Default, Ev: ev})
+	if len(note.Actions) != 1 || note.Actions[0].Name != "decline:R1" {
+		t.Fatalf("ringing notification should carry a Decline action, got %+v", note.Actions)
+	}
+	var cmd tea.Cmd
+	var tm tea.Model
+	tm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	m = tm.(Model)
+	if m.ringing != nil || cmd == nil {
+		t.Fatal("ctrl+x should decline (send a command) and clear the banner")
+	}
+	m = step(m, CallMsg{Profile: profile.Default, Ev: ev})
+	ev.Kind = wa.CallHandled
+	m = step(m, CallMsg{Profile: profile.Default, Ev: ev})
+	if m.ringing != nil {
+		t.Fatal("a call answered elsewhere should clear the banner")
+	}
+	for text, want := range map[string]string{
+		"[missed voice call]":   "Missed voice call",
+		"[declined video call]": "Declined video call",
+		"[voice call]":          "Voice call · answered on another device",
+	} {
+		if line, ok := callLine(text); !ok || !strings.Contains(line, want) {
+			t.Errorf("callLine(%q) = %q, want %q", text, line, want)
+		}
+	}
+}
