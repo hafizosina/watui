@@ -140,6 +140,25 @@ func (m Model) insertKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) promptKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.mode == modeCommand {
+		switch k.String() {
+		case "tab", "ctrl+n", "shift+tab", "ctrl+p":
+			list := m.commandSuggestions(m.cmdTyped)
+			if len(list) == 0 {
+				return m, nil
+			}
+			if k.String() == "tab" || k.String() == "ctrl+n" {
+				if m.prompt.Value() != m.cmdTyped {
+					m.cmdSel = (m.cmdSel + 1) % len(list)
+				}
+			} else {
+				m.cmdSel = (m.cmdSel - 1 + len(list)) % len(list)
+			}
+			m.prompt.SetValue(list[m.cmdSel].value)
+			m.prompt.CursorEnd()
+			return m, nil
+		}
+	}
 	switch k.String() {
 	case "esc", "ctrl+c", "ctrl+[":
 		if m.mode == modeSearch {
@@ -169,6 +188,7 @@ func (m Model) promptKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.prompt, cmd = m.prompt.Update(k)
+	m.cmdTyped, m.cmdSel = m.prompt.Value(), 0
 	if m.mode == modeSearch {
 		m.filter = m.prompt.Value()
 		m.applyFilter()
@@ -196,6 +216,7 @@ func (m Model) normalKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case ":":
 		m.mode = modeCommand
 		m.prompt.SetValue("")
+		m.cmdTyped, m.cmdSel = "", 0
 		m.prompt.Focus()
 		return m, nil
 	case "/":
@@ -445,6 +466,18 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "new":
 		m.openNewChat()
+		return m, nil
+	case "theme", "themes", "colorscheme", "colo":
+		_, arg, _ := strings.Cut(cmd, " ")
+		if arg = strings.TrimSpace(arg); arg == "" {
+			m.openThemePicker()
+			return m, nil
+		}
+		if err := m.setTheme(arg); err != nil {
+			m.setFlash(err.Error(), true)
+			return m, nil
+		}
+		m.setFlash("theme "+arg+" (for this session — set theme = "+arg+" in ~/.config/watui/config to keep it)", false)
 		return m, nil
 	case "sticker", "stickers":
 		m.focus = focusChat

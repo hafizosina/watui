@@ -107,6 +107,8 @@ type Model struct {
 	info         *infoState
 	ringing      *ringing
 	emojiSel     int
+	cmdSel       int
+	cmdTyped     string
 	stickers     *stickerPicker
 	emojiHidden  string
 	expanded     map[string]bool
@@ -122,6 +124,11 @@ type Model struct {
 
 func New(profiles []*profile.Profile, cfg config.Config, pl *player.Player, opts Options) Model {
 	m := newModel(profiles[0].WA, cfg, profiles[0].Images, pl)
+	if cfg.Theme != "" && cfg.Theme != currentTheme {
+		if err := m.setTheme(cfg.Theme); err != nil {
+			m.setFlash(err.Error(), true)
+		}
+	}
 	m.profiles = profiles
 	m.opts = opts
 	return m

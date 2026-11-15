@@ -26,6 +26,8 @@ type Config struct {
 
 	Notify      NotifyMode
 	NotifySound string
+
+	Theme string
 }
 
 type NotifyMode string
@@ -46,6 +48,8 @@ func Default() Config {
 
 		Notify:      NotifyOn,
 		NotifySound: "watui",
+
+		Theme: "tokyonight",
 	}
 }
 
@@ -56,6 +60,10 @@ const template = `# watui settings. Restart watui after editing, or change them 
 #   thumbnail  show the small preview WhatsApp sends with the message (no download, blurry)
 #   off        text only, e.g. "[image] caption"
 images = always
+
+# Colors: tokyonight, tokyonight-day, catppuccin-mocha, catppuccin-latte, gruvbox-dark, nord, dracula,
+# or your own file in ~/.config/watui/themes/<name>.conf. Try them live with :theme
+theme = tokyonight
 
 # Biggest picture size, in terminal cells.
 image_width = 40
@@ -152,6 +160,11 @@ func (c *Config) Set(assignment string) error {
 			return fmt.Errorf("notify must be on, private or off, got %q", value)
 		}
 		c.Notify = mode
+	case "theme":
+		if value == "" {
+			return fmt.Errorf("theme needs a name")
+		}
+		c.Theme = value
 	case "notify_sound":
 		if value == "" {
 			return fmt.Errorf("notify_sound needs a value: watui, system, off or a file path")

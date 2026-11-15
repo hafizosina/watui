@@ -137,7 +137,22 @@ func TestScreenshots(t *testing.T) {
 	shot("05-group-info", info)
 	shot("06-profiles", step(fresh(), key("1"), key("enter")))
 	shot("07-help", step(openChat(), key("?")))
+	cmdShot := typeInto(step(openChat(), key(":")), "s")
+	shot("08-commands", cmdShot)
+	for _, name := range []string{"catppuccin-mocha", "gruvbox-dark", "nord"} {
+		m := openChat()
+		if err := m.setTheme(name); err != nil {
+			t.Fatal(err)
+		}
+		shot("theme-"+name, m)
+	}
+	ApplyTheme(withName(builtinThemes[DefaultTheme], DefaultTheme))
 	_ = fmt.Sprint()
+}
+
+func withName(t Theme, name string) Theme {
+	t.Name = name
+	return t
 }
 
 type sgr struct {
@@ -178,8 +193,8 @@ func (s sgr) css() string {
 func ansiToHTML(view string) string {
 	var out strings.Builder
 	out.WriteString(`<!doctype html><html><head><meta charset="utf-8"><style>
-body{margin:0;background:#1a1b26;}
-pre{margin:0;padding:14px 16px;font-family:"Hack Nerd Font Mono","BlexMono Nerd Font Mono",monospace;font-size:14px;line-height:17px;color:#c0caf5;background:#1a1b26;display:inline-block}
+body{margin:0;background:BGCOLOR;}
+pre{margin:0;padding:14px 16px;font-family:"Hack Nerd Font Mono","BlexMono Nerd Font Mono",monospace;font-size:14px;line-height:17px;color:FGCOLOR;background:BGCOLOR;display:inline-block}
 span{white-space:pre}
 i{font-style:inherit;display:inline-block;width:1ch;height:17px;line-height:17px;overflow:visible;text-align:center;vertical-align:top}
 i.w{width:2ch}
@@ -247,7 +262,7 @@ i.w{width:2ch}
 		out.WriteString("</span>")
 	}
 	out.WriteString("</pre></body></html>")
-	return out.String()
+	return strings.NewReplacer("BGCOLOR", string(colBg), "FGCOLOR", string(colFg)).Replace(out.String())
 }
 
 func applySGR(s *sgr, params string) {

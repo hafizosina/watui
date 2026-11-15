@@ -61,6 +61,12 @@ func (m Model) View() string {
 			body = overlay(body, box, min(listW+2, max(0, m.width-bw)), max(0, mainH-m.composeH()-bh))
 		}
 	}
+	if m.mode == modeCommand {
+		if list := m.commandSuggestions(m.cmdTyped); len(list) > 0 {
+			box, _, bh := m.suggestionView(list)
+			body = overlay(body, box, 0, max(0, mainH-bh))
+		}
+	}
 	if m.stickers != nil {
 		box, bw, bh := m.stickerView()
 		body = overlay(body, box, max(0, (m.width-bw)/2), max(0, (mainH-bh)/2))
@@ -171,7 +177,7 @@ func (m Model) composeTitle() string {
 }
 
 func vimStyle(v vimMode) lipgloss.Style {
-	base := lipgloss.NewStyle().Foreground(colBgDark).Bold(true).Padding(0, 1)
+	base := lipgloss.NewStyle().Foreground(colOnAccent).Bold(true).Padding(0, 1)
 	switch v {
 	case vimNormal:
 		return base.Background(colBlue)
@@ -352,28 +358,35 @@ func (m *Model) renderMessages(forceBottom bool) {
 		if newGroup && !newDay {
 			lines = append(lines, "")
 		}
-		var block []string
+		bodyW := w
+		if msg.FromMe {
+			bodyW = max(24, w*7/10)
+		}
+		var content []string
 		if newGroup {
 			nameStyle := lipgloss.NewStyle().Foreground(senderColor(msg.SenderJID)).Bold(true)
 			if msg.FromMe {
 				nameStyle = styleMe
 			}
-			block = append(block, " "+nameStyle.Render(nameOf(msg))+" "+styleDim.Render(msg.TS.Local().Format("15:04")))
+			content = append(content, nameStyle.Render(nameOf(msg))+" "+styleDim.Render(msg.TS.Local().Format("15:04")))
 		}
 		if msg.Forwarded && !msg.Deleted {
-			block = append(block, "   "+styleDim.Italic(true).Render("↪ forwarded"))
+			content = append(content, styleDim.Italic(true).Render("↪ forwarded"))
 		}
 		if msg.QuoteID != "" && !msg.Deleted {
-			bar := lipgloss.NewStyle().Foreground(senderColor(msg.QuoteSender)).Render("┃ ")
+			qbar := lipgloss.NewStyle().Foreground(senderColor(msg.QuoteSender)).Render("┃ ")
 			who := lipgloss.NewStyle().Foreground(senderColor(msg.QuoteSender)).Bold(true).Render(nameOfJID(msg.QuoteSender, ""))
-			quoted := ansi.Truncate(strings.ReplaceAll(sanitize(msg.QuoteText), "\n", " "), max(10, w-8), "…")
-			block = append(block, "   "+bar+who, "   "+bar+styleDim.Render(quoted))
+			quoted := ansi.Truncate(strings.ReplaceAll(sanitize(msg.QuoteText), "\n", " "), max(10, bodyW-8), "…")
+			content = append(content, qbar+who, qbar+styleDim.Render(quoted))
 		}
 		q, show := m.shownImages[msg.ID]
-		block = append(block, strings.Split(m.renderBody(msg, w, show, q), "\n")...)
-		if r := reactionLine(msg.Reactions); r != "" {
-			block = append(block, "   "+r)
+		for _, l := range strings.Split(m.renderBody(msg, bodyW, show, q), "\n") {
+			content = append(content, strings.TrimPrefix(l, "   "))
 		}
+		if r := reactionLine(msg.Reactions); r != "" {
+			content = append(content, r)
+		}
+		block := m.bubble(content, msg, w)
 		if showSel && i == m.sel {
 			for j, l := range block {
 				block[j] = marker + strings.TrimPrefix(l, " ")
@@ -392,6 +405,29 @@ func (m *Model) renderMessages(forceBottom bool) {
 	if atBottom {
 		m.vp.GotoBottom()
 	}
+}
+
+// bubble frames one message: others get a bar in their color on the left,
+// your own messages sit on the right with a blue bar.
+func (m Model) bubble(content []string, msg store.Message, w int) []string {
+	out := make([]string, len(content))
+	if !msg.FromMe {
+		bar := lipgloss.NewStyle().Foreground(senderColor(msg.SenderJID)).Render("▎")
+		for i, l := range content {
+			out[i] = " " + bar + " " + l
+		}
+		return out
+	}
+	blockW := 0
+	for _, l := range content {
+		blockW = max(blockW, lipgloss.Width(l))
+	}
+	pad := max(0, w-blockW-2)
+	bar := lipgloss.NewStyle().Foreground(colBlue).Render("▐")
+	for i, l := range content {
+		out[i] = " " + strings.Repeat(" ", pad) + l + strings.Repeat(" ", blockW-lipgloss.Width(l)) + " " + bar
+	}
+	return out
 }
 
 func reactionLine(reactions map[string]string) string {
@@ -416,7 +452,7 @@ func reactionLine(reactions map[string]string) string {
 	for i, e := range order {
 		parts[i] = e + " " + styleDim.Render(fmt.Sprint(counts[e]))
 	}
-	return lipgloss.NewStyle().Background(colBgDark).Render(" ") + strings.Join(parts, "  ")
+	return strings.Join(parts, "  ")
 }
 
 const maxImagesPerChat = 40
@@ -621,7 +657,7 @@ func (m Model) bottomLine() string {
 		return styleKey.Render("/") + m.prompt.View()
 	}
 	if banner, ok := m.ringBanner(); ok {
-		b := lipgloss.NewStyle().Background(colRed).Foreground(colBgDark).Bold(true)
+		b := lipgloss.NewStyle().Background(colRed).Foreground(colOnAccent).Bold(true)
 		return b.Render(ansi.Truncate(banner, m.width, "…") + strings.Repeat(" ", max(0, m.width-lipgloss.Width(banner))))
 	}
 	right := modeStyle(m.mode).Render(m.mode.String())
@@ -729,6 +765,7 @@ func helpView(w int) string {
 		{":mute  :unmute", "mute chat"},
 		{":archive  :unarchive", "archive chat"},
 		{":archived", "toggle archived view"},
+		{":theme [name]", "pick a color theme (j/k previews)"},
 		{":new", "new chat / new group"},
 		{":set images=off", "always | thumbnail | off"},
 		{":set", "show settings"},

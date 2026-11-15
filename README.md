@@ -15,7 +15,9 @@ Rendered from demo data (`make screenshots`). Pictures, stickers and GIFs are dr
 | ![Chat](docs/screenshots/01-chat.png) **Chat** — lazygit-style boxes, replies, reactions, voice notes, files, forwarded messages | ![Emoji](docs/screenshots/02-compose-emoji.png) **Compose** — vim editor with `:emoji` completion |
 | ![Message menu](docs/screenshots/03-message-menu.png) **Message menu** — `Space` on a message | ![Chat menu](docs/screenshots/04-chat-menu.png) **Chat menu** — `Space` on a chat |
 | ![Group info](docs/screenshots/05-group-info.png) **Group info** — members, admins, description | ![Profiles](docs/screenshots/06-profiles.png) **Profiles** — several WhatsApp accounts |
-| ![Keybindings](docs/screenshots/07-help.png) **Keybindings** — `?` | |
+| ![Keybindings](docs/screenshots/07-help.png) **Keybindings** — `?` | ![Commands](docs/screenshots/08-commands.png) **Command line** — suggestions as you type `:` |
+| ![Catppuccin](docs/screenshots/theme-catppuccin-mocha.png) **Theme** catppuccin-mocha | |
+| ![Gruvbox](docs/screenshots/theme-gruvbox-dark.png) **Theme** gruvbox-dark | ![Nord](docs/screenshots/theme-nord.png) **Theme** nord |
 
 ## Install
 
@@ -143,6 +145,8 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 | Pin | `p` | 24 hours, 7 days or 30 days, or unpin |
 | Delete for everyone | `d` | your own messages, first 2 days; asks first |
 
+While typing after `:`, a popup suggests commands (with a short description) and their arguments — theme names, profile names, `:set` keys and values. `Tab`/`Ctrl+n` completes and cycles, `Shift+Tab`/`Ctrl+p` goes back, `Enter` runs.
+
 Commands: `:pause` `:speed` `:stop` (playing voice note), `:pin` `:unpin` `:mute` `:unmute` `:archive` `:unarchive` `:archived` `:read` `:q`
 
 ## Settings
@@ -157,6 +161,22 @@ collapse_lines = 15    # long messages fold after this many lines (0 = never)
 notify = on            # on | private (sender only) | off
 notify_sound = watui   # watui (own chime; calls ring) | system | off | /path/to/sound.ogg
 ```
+
+### Themes
+
+`theme = tokyonight` in the config. Built in: `tokyonight` (default), `tokyonight-day`, `catppuccin-mocha`, `catppuccin-latte`, `gruvbox-dark`, `nord`, `dracula`.
+
+- `:theme` opens a picker — `j`/`k` (or `Ctrl+n`/`Ctrl+p`) preview each theme live, `Enter` keeps it for the session, `Esc` restores the old one. `:theme nord` switches directly.
+- Your own theme: `~/.config/watui/themes/<name>.conf`, then `theme = <name>`. Only list the colors you want to change; the rest come from `base` (or tokyonight):
+
+  ```
+  base = catppuccin-mocha
+  blue = #89b4fa
+  green = #a6e3a1
+  ```
+
+  Colors: `bg bg_dark highlight gutter comment fg_dark fg blue cyan green magenta orange red yellow teal on_accent` (`on_accent` = text on colored badges).
+- watui colors text and borders but keeps your terminal background, so pick a light theme (`*-day`, `*-latte`) with a light terminal background.
 
 ### Desktop notifications
 

@@ -187,7 +187,7 @@ func initials(name string) string {
 }
 
 func avatar(name, key string, cols, rows int) []string {
-	bg := lipgloss.NewStyle().Background(senderColor(key)).Foreground(colBgDark).Bold(true)
+	bg := lipgloss.NewStyle().Background(senderColor(key)).Foreground(colOnAccent).Bold(true)
 	blank := bg.Render(strings.Repeat(" ", cols))
 	out := make([]string, rows)
 	ini := initials(name)
@@ -247,12 +247,12 @@ func wrapLines(text string, w, maxLines int) []string {
 }
 
 func button(label, key string) string {
-	b := lipgloss.NewStyle().Background(colGreen).Foreground(colBgDark).Bold(true).Padding(0, 1).Render(label)
+	b := lipgloss.NewStyle().Background(colGreen).Foreground(colOnAccent).Bold(true).Padding(0, 1).Render(label)
 	return b + styleDim.Render("  "+key)
 }
 
 func badge(text string, bg lipgloss.Color) string {
-	return lipgloss.NewStyle().Background(bg).Foreground(colBgDark).Bold(true).Padding(0, 1).Render(text)
+	return lipgloss.NewStyle().Background(bg).Foreground(colOnAccent).Bold(true).Padding(0, 1).Render(text)
 }
 
 func (m Model) infoView(w, h int) string {

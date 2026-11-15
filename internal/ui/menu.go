@@ -34,6 +34,8 @@ type menu struct {
 	filterable bool
 	filter     string
 	dynamic    func(filter string) []menuItem
+	preview    func(m *Model, it menuItem)
+	cancel     func(m *Model)
 }
 
 const menuMaxRows = 12
@@ -71,16 +73,21 @@ func (m Model) menuKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := k.String()
 	switch key {
 	case "esc", "ctrl+c", "ctrl+[":
+		if mn.cancel != nil {
+			mn.cancel(&m)
+		}
 		m.menu = nil
 		return m, nil
 	case "ctrl+n", "down", "tab":
 		if len(items) > 0 {
 			mn.cursor = (mn.cursor + 1) % len(items)
+			m.previewMenu()
 		}
 		return m, nil
 	case "ctrl+p", "up", "shift+tab":
 		if len(items) > 0 {
 			mn.cursor = (mn.cursor - 1 + len(items)) % len(items)
+			m.previewMenu()
 		}
 		return m, nil
 	case "enter":
@@ -110,11 +117,13 @@ func (m Model) menuKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "j":
 		if len(items) > 0 {
 			mn.cursor = (mn.cursor + 1) % len(items)
+			m.previewMenu()
 		}
 		return m, nil
 	case "k":
 		if len(items) > 0 {
 			mn.cursor = (mn.cursor - 1 + len(items)) % len(items)
+			m.previewMenu()
 		}
 		return m, nil
 	case "q":
@@ -127,6 +136,16 @@ func (m Model) menuKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m *Model) previewMenu() {
+	mn := m.menu
+	if mn == nil || mn.preview == nil {
+		return
+	}
+	if items := mn.visible(); mn.cursor < len(items) {
+		mn.preview(m, items[mn.cursor])
+	}
 }
 
 func (m Model) runItem(it menuItem) (tea.Model, tea.Cmd) {

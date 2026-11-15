@@ -689,11 +689,11 @@ func (e *editor) cursorCell(r rune) string {
 	case e.pending != "" && blank:
 		return lipgloss.NewStyle().Foreground(colBlue).Render("▄")
 	case e.pending != "":
-		return lipgloss.NewStyle().Foreground(colBgDark).Background(colYellow).Render(string(r))
+		return lipgloss.NewStyle().Foreground(colOnAccent).Background(colYellow).Render(string(r))
 	case e.mode == vimVisual || e.mode == vimVisualLine:
-		return lipgloss.NewStyle().Foreground(colBgDark).Background(colMagenta).Render(string(r))
+		return lipgloss.NewStyle().Foreground(colOnAccent).Background(colMagenta).Render(string(r))
 	}
-	return lipgloss.NewStyle().Foreground(colBgDark).Background(colBlue).Render(string(r))
+	return lipgloss.NewStyle().Foreground(colOnAccent).Background(colBlue).Render(string(r))
 }
 
 func (e *editor) View() string {
