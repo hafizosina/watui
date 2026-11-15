@@ -15,7 +15,10 @@ import (
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	waLog "go.mau.fi/whatsmeow/util/log"
 
+	"go.mau.fi/whatsmeow/types"
+
 	"github.com/zhenzhu/watui/internal/config"
+	"github.com/zhenzhu/watui/internal/profile"
 	"github.com/zhenzhu/watui/internal/store"
 	"github.com/zhenzhu/watui/internal/wa"
 )
@@ -63,7 +66,7 @@ func testModel(t *testing.T) Model {
 		t.Fatal(err)
 	}
 	client := wa.New(whatsmeow.NewClient(device, waLog.Noop), st, waLog.Noop)
-	return New(client, config.Default(), nil, nil)
+	return New([]*profile.Profile{{Name: profile.Default, WA: client}}, config.Default(), nil, Options{})
 }
 
 func step(m Model, msgs ...tea.Msg) Model {
@@ -322,5 +325,88 @@ func TestMediaLabels(t *testing.T) {
 	}
 	if !strings.Contains(labels, "Play video") {
 		t.Errorf("video menu should offer Play video, got %s", labels)
+	}
+}
+
+func linkedProfile(t *testing.T, name, phone string) *profile.Profile {
+	t.Helper()
+	m := testModel(t)
+	m.wa.WA.Store.ID = &types.JID{User: phone, Server: types.DefaultUserServer}
+	return &profile.Profile{Name: name, Dir: t.TempDir(), WA: m.wa}
+}
+
+func TestProfiles(t *testing.T) {
+	work := linkedProfile(t, "work", "62811")
+	personal := linkedProfile(t, profile.Default, "62822")
+	if err := work.WA.Store.PutMessage(store.Message{ChatJID: "62999@s.whatsapp.net", ID: "W1", SenderJID: "62999@s.whatsapp.net", TS: time.Now(), Text: "rapat jam 3", Status: store.StatusSent}); err != nil {
+		t.Fatal(err)
+	}
+	m := New([]*profile.Profile{personal, work}, config.Default(), nil, Options{})
+	m = step(m, tea.WindowSizeMsg{Width: 110, Height: 34}, ChangedMsg{})
+	m = step(m, ChangedMsg{Profile: "work"})
+	if m.unread["work"] != 3 {
+		t.Fatalf("background profile unread should be counted, got %d", m.unread["work"])
+	}
+	frame := m.View()
+	checkFrame(t, frame, 110, 34)
+	for _, want := range []string{"[1] Profile", "[2] Chats", "● default", "others", "3"} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("frame should contain %q", want)
+		}
+	}
+	m = step(m, key("g"), key("t"))
+	if m.activeProfile().Name != "work" || len(m.chats) != 3 || m.names[m.chats[0].JID] == "" {
+		t.Fatalf("gt should switch to work and load its chats, got %s with %d chats", m.activeProfile().Name, len(m.chats))
+	}
+	if !strings.Contains(m.View(), "● work") {
+		t.Fatal("profile box should show the active profile")
+	}
+	m = step(m, key("1"))
+	if m.focus != focusProfiles {
+		t.Fatal("1 should focus the profiles box")
+	}
+	m = step(m, key("enter"))
+	if m.menu == nil || m.menu.title != "Profiles" || len(m.menu.items) != 3 {
+		t.Fatal("enter should list the profiles plus Add profile")
+	}
+	m = step(m, key("1"))
+	if m.activeProfile().Name != profile.Default {
+		t.Fatal("picking 1 in the list should switch to default")
+	}
+	m = step(m, key("1"), key(" "))
+	if m.menu == nil || !strings.HasPrefix(m.menu.title, "Profile") {
+		t.Fatal("space in profiles should open the profile menu")
+	}
+	labels := ""
+	for _, it := range m.menu.items {
+		labels += it.label + "|"
+	}
+	for _, want := range []string{"Rename", "Reconnect", "Log out", "Add profile"} {
+		if !strings.Contains(labels, want) {
+			t.Errorf("profile menu should have %q, got %s", want, labels)
+		}
+	}
+	if strings.Contains(labels, "Remove") {
+		t.Error("default profile must not offer Remove")
+	}
+	m = step(m, key("esc"), tea.KeyMsg{Type: tea.KeyCtrlJ})
+	if m.focus != focusList {
+		t.Fatal("ctrl+j from profiles should go to chats")
+	}
+	m = step(m, tea.KeyMsg{Type: tea.KeyCtrlK})
+	if m.focus != focusProfiles {
+		t.Fatal("ctrl+k from chats should go to profiles")
+	}
+	m = step(m, key(":"))
+	for _, k := range keysOf("profile work") {
+		m = step(m, k)
+	}
+	m = step(m, key("enter"))
+	if m.activeProfile().Name != "work" {
+		t.Fatal(":profile work should switch")
+	}
+	checkFrame(t, m.View(), 110, 34)
+	if os.Getenv("WATUI_SHOW") != "" {
+		t.Log("\n" + m.View())
 	}
 }

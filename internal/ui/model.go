@@ -14,6 +14,7 @@ import (
 	"github.com/zhenzhu/watui/internal/config"
 	"github.com/zhenzhu/watui/internal/media"
 	"github.com/zhenzhu/watui/internal/player"
+	"github.com/zhenzhu/watui/internal/profile"
 	"github.com/zhenzhu/watui/internal/store"
 	"github.com/zhenzhu/watui/internal/wa"
 )
@@ -44,11 +45,14 @@ type focus int
 const (
 	focusList focus = iota
 	focusChat
+	focusProfiles
 )
 
 const messageLimit = 1000
 
-type ChangedMsg struct{}
+type ChangedMsg struct {
+	Profile string
+}
 
 type tickMsg time.Time
 
@@ -63,6 +67,12 @@ type editorDoneMsg struct {
 }
 
 type Model struct {
+	profiles   []*profile.Profile
+	active     int
+	profCursor int
+	unread     map[string]int
+	opts       Options
+
 	wa     *wa.Client
 	cfg    config.Config
 	images *media.Manager
@@ -83,18 +93,19 @@ type Model struct {
 	filter       string
 	showArchived bool
 
-	openJID     string
-	messages    []store.Message
-	sel         int
-	spans       [][2]int
-	menu        *menu
-	replyTo     *store.Message
-	editing     *store.Message
-	forceShow   map[string]bool
-	forceHide   map[string]bool
-	shownImages map[string]media.Quality
-	expanded    map[string]bool
-	foldable    map[string]bool
+	openJID      string
+	messages     []store.Message
+	sel          int
+	spans        [][2]int
+	menu         *menu
+	replyTo      *store.Message
+	editing      *store.Message
+	forceShow    map[string]bool
+	forceHide    map[string]bool
+	shownImages  map[string]media.Quality
+	pendingGroup []string
+	expanded     map[string]bool
+	foldable     map[string]bool
 
 	vp         viewport.Model
 	input      *editor
@@ -104,7 +115,14 @@ type Model struct {
 	flashUntil time.Time
 }
 
-func New(client *wa.Client, cfg config.Config, images *media.Manager, pl *player.Player) Model {
+func New(profiles []*profile.Profile, cfg config.Config, pl *player.Player, opts Options) Model {
+	m := newModel(profiles[0].WA, cfg, profiles[0].Images, pl)
+	m.profiles = profiles
+	m.opts = opts
+	return m
+}
+
+func newModel(client *wa.Client, cfg config.Config, images *media.Manager, pl *player.Player) Model {
 	in := newEditor()
 
 	pr := textinput.New()
@@ -122,6 +140,7 @@ func New(client *wa.Client, cfg config.Config, images *media.Manager, pl *player
 		forceHide:   map[string]bool{},
 		shownImages: map[string]media.Quality{},
 		expanded:    map[string]bool{},
+		unread:      map[string]int{},
 		foldable:    map[string]bool{},
 		vp:          viewport.New(0, 0),
 		input:       in,
@@ -162,8 +181,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.focused = false
 		return m, nil
 	case ChangedMsg:
+		if p := m.activeProfile(); p != nil && msg.Profile != "" && msg.Profile != p.Name {
+			for _, other := range m.profiles {
+				if other.Name == msg.Profile {
+					m.countUnread(other)
+				}
+			}
+			return m, nil
+		}
 		m.refresh()
 		return m, m.markReadCmd()
+	case newChatMsg:
+		return m.newChatReady(msg)
+	case profileAddedMsg:
+		return m.profileAdded(msg)
+	case profileRemovedMsg:
+		return m.profileRemoved(msg)
 	case tickMsg:
 		if m.player != nil {
 			if _, playing := m.player.State(); playing {
@@ -212,6 +245,15 @@ func (m *Model) refresh() {
 		return
 	}
 	m.allChats = chats
+	if p := m.activeProfile(); p != nil {
+		n := 0
+		for _, c := range chats {
+			if c.Unread > 0 && !c.Muted() && !c.Archived {
+				n++
+			}
+		}
+		m.unread[p.Name] = n
+	}
 	for _, c := range chats {
 		m.names[c.JID] = sanitize(m.wa.ChatName(c))
 	}
@@ -286,7 +328,7 @@ func (m *Model) clampCursor() {
 }
 
 func (m Model) listRows() int {
-	return max(1, (m.mainH()-statusPanelH-2)/2)
+	return max(1, (m.mainH()-m.profilesH()-2)/2)
 }
 
 func (m Model) currentChat() (store.Chat, bool) {

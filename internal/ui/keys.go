@@ -18,14 +18,14 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeNormal || m.mode == modeInsert {
 		switch k.String() {
 		case "ctrl+h":
-			if m.focus == focusList && m.mode == modeNormal {
+			if (m.focus == focusList || m.focus == focusProfiles) && m.mode == modeNormal {
 				return m, tmuxPane("-L")
 			}
 			m.enterNormal()
 			m.focus = focusList
 			return m, nil
 		case "ctrl+l":
-			if m.focus == focusList && m.openJID != "" {
+			if (m.focus == focusList || m.focus == focusProfiles) && m.openJID != "" {
 				m.enterNormal()
 				m.focus = focusChat
 				m.renderMessages(false)
@@ -40,6 +40,10 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.focus = focusChat
 				m.renderMessages(false)
 				return m, nil
+			case m.mode == modeNormal && m.focus == focusList:
+				m.focus = focusProfiles
+				m.profCursor = m.active
+				return m, nil
 			case m.mode == modeNormal:
 				return m, tmuxPane("-U")
 			}
@@ -47,6 +51,9 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			switch {
 			case m.mode == modeNormal && m.focus == focusChat && m.openJID != "":
 				m.enterCompose(vimNormal)
+				return m, nil
+			case m.mode == modeNormal && m.focus == focusProfiles:
+				m.focus = focusList
 				return m, nil
 			case m.mode == modeNormal:
 				return m, tmuxPane("-D")
@@ -128,9 +135,14 @@ func (m Model) normalKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := k.String()
 	if m.pendingG {
 		m.pendingG = false
-		if key == "g" {
+		switch key {
+		case "g":
 			m.top()
 			return m, nil
+		case "t":
+			return m.stepProfile(1)
+		case "T":
+			return m.stepProfile(-1)
 		}
 	}
 	switch key {
@@ -158,22 +170,27 @@ func (m Model) normalKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.bottom()
 		return m, nil
 	case "tab":
-		if m.focus == focusList && m.openJID != "" {
+		if m.focus != focusChat && m.openJID != "" {
 			m.focus = focusChat
 			return m, m.markReadCmd()
 		}
 		m.focus = focusList
 		return m, nil
 	case "1":
-		m.focus = focusList
+		m.focus = focusProfiles
+		m.profCursor = m.active
 		return m, nil
 	case "2":
+		m.focus = focusList
+		return m, nil
+	case "3":
 		if m.openJID != "" {
 			m.focus = focusChat
+			m.renderMessages(false)
 			return m, m.markReadCmd()
 		}
 		return m, nil
-	case "3":
+	case "4":
 		m.enterInsert()
 		return m, nil
 	case "J":
@@ -187,7 +204,10 @@ func (m Model) normalKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.focus == focusList {
+	switch m.focus {
+	case focusProfiles:
+		return m.profilesKey(key)
+	case focusList:
 		return m.listKey(key)
 	}
 	return m.chatKey(key)
@@ -224,6 +244,9 @@ func (m Model) listKey(key string) (tea.Model, tea.Cmd) {
 			m.filter = ""
 			m.applyFilter()
 		}
+	case "n":
+		m.openNewChat()
+		return m, nil
 	case "A":
 		m.showArchived = !m.showArchived
 		m.filter = ""
@@ -365,6 +388,20 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 	case "h", "help":
 		m.showHelp = true
 		return m, nil
+	case "new":
+		m.openNewChat()
+		return m, nil
+	case "group":
+		_, name, _ := strings.Cut(cmd, " ")
+		if len(m.pendingGroup) == 0 {
+			m.setFlash("pick members first: n → + New group…", true)
+			return m, nil
+		}
+		m.setFlash("creating group…", false)
+		return m, m.createGroupCmd(strings.TrimSpace(name))
+	case "profile", "profiles", "p":
+		_, arg, _ := strings.Cut(cmd, " ")
+		return m.profileCommand(arg)
 	case "set":
 		_, arg, _ := strings.Cut(cmd, " ")
 		arg = strings.TrimSpace(arg)

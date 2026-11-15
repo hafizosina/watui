@@ -25,9 +25,25 @@ It shows a QR code. On your phone: **WhatsApp → Settings → Linked devices �
 Other commands:
 
 ```bash
-watui login     # link again (after logout)
+watui login     # link the default profile again (after logout)
+watui add work  # link another account as profile "work"
 watui logout    # unlink this computer
 ```
+
+## Profiles (several WhatsApp accounts)
+
+All profiles stay connected; the screen shows one at a time. The top-left **[1] Profile** box shows the current profile and the unread count of the others.
+
+| Where | Key / command | Action |
+|---|---|---|
+| anywhere | `gt` / `gT` | next / previous profile |
+| anywhere | `1` (or `Ctrl+k` from Chats) | focus the Profile box |
+| Profile box | `Enter` | list of profiles (unread per profile) → pick with `Ctrl+n`/`Ctrl+p` + `Enter`, or its number |
+| Profile box | `Space` | actions: Rename · Reconnect · Log out · Remove · Add profile |
+| Profile box | `a` | add a profile (QR code) |
+| command | `:profile <name>`, `:profile add <name>`, `:profile rename <name> <label>` | same from the command line |
+
+From the shell: `watui add work`, `watui profiles`, `watui logout work`. Your first account is the `default` profile (data stays in `~/.local/share/watui`); others live in `~/.local/share/watui/profiles/<name>/`. Remove deletes a profile's saved chats; `default` can only be logged out.
 
 ## Keys
 
@@ -42,6 +58,7 @@ The screen has two panes: **chat list** (left) and **messages** (right). `Tab` s
 | | `i` | open chat and type |
 | | `/` | search chats |
 | | `A` | show archived chats |
+| | `n` | new chat / new group (also `:new`) |
 | NORMAL (messages) | `j` / `k` | select next / previous message |
 | | `Ctrl+d` / `Ctrl+u`, `gg` / `G` | jump |
 | | `Space` | message menu (like right-click) |
@@ -62,6 +79,14 @@ The screen has two panes: **chat list** (left) and **messages** (right). `Tab` s
 | INSERT | type; `Enter` new line; `Esc` or `jk` → NORMAL; `Ctrl+w` delete word; `Ctrl+u` delete to line start |
 | NORMAL | `h j k l w b e 0 ^ $ gg G` move · `i a I A o O` insert · `x X dd D dw de diw daw` delete · `cw ce ciw cc C s S` change · `yy Y yiw p P` yank/paste · `u` / `Ctrl+r` undo/redo · `J` join · `~` case · `r` replace · `v` / `V` visual · `Esc` leaves Compose |
 | VISUAL / V-LINE | move to extend · `d` / `x` delete · `y` yank · `c` change · `~ u U` case · `o` other end · `p` replace with yank · `Esc` back |
+
+### New chat and new group
+
+`n` in Chats opens a search over your synced contacts. Type part of a name or a number (a leading `0` is read as your own country code), `Ctrl+n`/`Ctrl+p`, `Enter`.
+
+- Picking a contact opens the chat and starts typing (an existing chat with them just opens).
+- Typing a number that isn't a contact shows **Chat with +62…** first; watui checks it is on WhatsApp before opening it.
+- **+ New group…**: `Enter` toggles members (search keeps working), then **✓ Next** asks for the name (max 25 characters) and creates the group.
 
 ### Message menu
 

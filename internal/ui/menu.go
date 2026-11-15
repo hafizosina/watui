@@ -31,18 +31,32 @@ type menu struct {
 	cursor     int
 	filterable bool
 	filter     string
+	dynamic    func(filter string) []menuItem
 }
 
 const menuMaxRows = 12
 
 func (mn *menu) visible() []menuItem {
+	var out []menuItem
+	if mn.dynamic != nil {
+		out = append(out, mn.dynamic(mn.filter)...)
+	}
 	if !mn.filterable || mn.filter == "" {
-		return mn.items
+		return append(out, mn.items...)
 	}
 	needle := strings.ToLower(mn.filter)
-	var out []menuItem
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, needle)
+	if strings.HasPrefix(digits, "0") {
+		digits = digits[1:]
+	}
 	for _, it := range mn.items {
-		if strings.Contains(strings.ToLower(it.label), needle) {
+		label := strings.ToLower(it.label)
+		if strings.Contains(label, needle) || (len(digits) >= 4 && strings.Contains(label, digits)) {
 			out = append(out, it)
 		}
 	}

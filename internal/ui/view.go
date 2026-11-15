@@ -21,10 +21,6 @@ const (
 	iconGroup = ""
 )
 
-const (
-	statusPanelH = 3
-)
-
 func (m Model) composeH() int {
 	return m.input.Height() + 2
 }
@@ -40,11 +36,11 @@ func (m Model) View() string {
 	listW := m.listWidth()
 	chatW := m.width - listW
 	mainH := m.mainH()
-	chatsH := mainH - statusPanelH
+	chatsH := mainH - m.profilesH()
 	msgsH := mainH - m.composeH()
 
 	left := lipgloss.JoinVertical(lipgloss.Left,
-		panel("watui", "", m.statusView(), listW, statusPanelH, false),
+		panel(m.profilesTitle(), m.profilesFooter(), m.profilesView(listW-2), listW, m.profilesH(), m.mode == modeNormal && m.focus == focusProfiles),
 		panel(m.chatsTitle(), m.chatsFooter(), m.listView(listW-2), listW, chatsH, m.mode != modeInsert && m.focus == focusList),
 	)
 	var right string
@@ -105,50 +101,10 @@ func panel(title, footer, body string, w, h int, active bool) string {
 	return strings.Join(out, "\n")
 }
 
-func (m Model) statusView() string {
-	state, syncing := m.wa.State()
-	var conn string
-	switch {
-	case state == wa.StateLoggedOut:
-		conn = lipgloss.NewStyle().Foreground(colRed).Render("● logged out")
-	case state == wa.StateDisconnected:
-		conn = lipgloss.NewStyle().Foreground(colRed).Render("○ offline")
-	case state == wa.StateConnecting:
-		conn = lipgloss.NewStyle().Foreground(colYellow).Render("◌ connecting")
-	case syncing:
-		conn = lipgloss.NewStyle().Foreground(colYellow).Render("◌ syncing")
-	default:
-		conn = lipgloss.NewStyle().Foreground(colGreen).Render("● online")
-	}
-	unread := 0
-	for _, c := range m.allChats {
-		if c.Unread > 0 && !c.Muted() && !c.Archived {
-			unread++
-		}
-	}
-	line := " " + conn
-	if m.player != nil {
-		if st, ok := m.player.State(); ok {
-			icon := "▶"
-			if st.Paused {
-				icon = "⏸"
-			}
-			line += styleDim.Render(" · ") + lipgloss.NewStyle().Foreground(colGreen).Render(icon+" "+clock(st.Position)+"/"+clock(st.Duration))
-		}
-	}
-	if me := m.wa.Me(); me != "" {
-		line += styleDim.Render(" · ") + styleText.Render(me)
-	}
-	if unread > 0 {
-		line += styleDim.Render(" · ") + lipgloss.NewStyle().Foreground(colGreen).Render(fmt.Sprintf("%d unread", unread))
-	}
-	return line
-}
-
 func (m Model) chatsTitle() string {
-	title := "[1] Chats"
+	title := "[2] Chats"
 	if m.showArchived {
-		title = "[1] Archived"
+		title = "[2] Archived"
 	}
 	if m.filter != "" {
 		title += " /" + m.filter
@@ -165,10 +121,10 @@ func (m Model) chatsFooter() string {
 
 func (m Model) messagesTitle() string {
 	if m.openJID == "" {
-		return "[2] Messages"
+		return "[3] Messages"
 	}
 	chat, _ := m.openChat()
-	title := "[2] " + m.names[m.openJID]
+	title := "[3] " + m.names[m.openJID]
 	if chat.IsGroup {
 		title += " · group"
 	}
@@ -191,15 +147,15 @@ func (m Model) messagesFooter() string {
 func (m Model) composeTitle() string {
 	switch {
 	case m.editing != nil:
-		return "[3] Editing message · esc in normal mode cancels"
+		return "[4] Editing message · esc in normal mode cancels"
 	case m.replyTo != nil:
 		who := "You"
 		if !m.replyTo.FromMe {
 			who = m.wa.ContactName(m.replyTo.SenderJID, m.replyTo.SenderName)
 		}
-		return "[3] Replying to " + sanitize(who) + ": " + strings.ReplaceAll(sanitize(m.replyTo.Text), "\n", " ")
+		return "[4] Replying to " + sanitize(who) + ": " + strings.ReplaceAll(sanitize(m.replyTo.Text), "\n", " ")
 	}
-	return "[3] Compose"
+	return "[4] Compose"
 }
 
 func vimStyle(v vimMode) lipgloss.Style {
@@ -634,8 +590,10 @@ func (m Model) hintPairs() [][2]string {
 			return [][2]string{{"Delete", "d"}, {"Yank", "y"}, {"Change", "c"}, {"Case", "~ u U"}, {"Swap end", "o"}, {"Cancel", "esc"}}
 		}
 		return [][2]string{{"Send", "ctrl+s"}, {"Newline", "enter"}, {"Normal", "esc / jk"}, {"Editor", "ctrl+e"}}
+	case m.focus == focusProfiles:
+		return [][2]string{{"Profiles", "enter"}, {"Actions", "space"}, {"Add", "a"}, {"Next/prev profile", "gt/gT"}, {"Chats", "^j"}}
 	case m.focus == focusList:
-		return [][2]string{{"Open", "enter"}, {"Write", "i"}, {"Search", "/"}, {"Next/prev chat", "J/K"}, {"Archived", "A"}, {"Command", ":"}, {"Keybindings", "?"}}
+		return [][2]string{{"Open", "enter"}, {"New chat", "n"}, {"Write", "i"}, {"Search", "/"}, {"Next/prev chat", "J/K"}, {"Archived", "A"}, {"Command", ":"}, {"Keybindings", "?"}}
 	}
 	if m.menu != nil {
 		return [][2]string{{"Move", "^n/^p"}, {"Pick", "enter"}, {"Close", "esc"}}
@@ -661,6 +619,7 @@ func helpView(w int) string {
 		{"i / a", "open chat and start typing"},
 		{"/", "search chats (esc clears)"},
 		{"A", "toggle archived chats"},
+		{"n", "new chat / new group (search contacts or type a number)"},
 		{"", ""},
 		{"", "Messages"},
 		{"j / k", "select next / previous message"},
@@ -680,7 +639,8 @@ func helpView(w int) string {
 		{" ", "copy y · forward f · star s · pin p · delete d"},
 		{"", ""},
 		{"", "Global"},
-		{"1 / 2 / 3", "focus chats / messages / compose"},
+		{"1 / 2 / 3 / 4", "focus profiles / chats / messages / compose"},
+		{"gt / gT", "next / previous profile"},
 		{"tab", "switch between chats and messages"},
 		{"ctrl+h / ctrl+l", "chats / messages (then tmux pane)"},
 		{"ctrl+j / ctrl+k", "messages ↔ compose (then tmux pane)"},
@@ -705,10 +665,14 @@ func helpView(w int) string {
 		{":mute  :unmute", "mute chat"},
 		{":archive  :unarchive", "archive chat"},
 		{":archived", "toggle archived view"},
+		{":new", "new chat / new group"},
 		{":set images=off", "always | thumbnail | off"},
 		{":set", "show settings"},
 		{":read", "mark chat read"},
 		{":pause :speed :stop", "control the playing voice note"},
+		{":profile <name>", "switch profile"},
+		{":profile add <name>", "link another WhatsApp account (QR)"},
+		{":profile rename <name> <label>", "change how a profile is shown"},
 		{":q", "quit"},
 	}
 	var b strings.Builder

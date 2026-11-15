@@ -1,32 +1,20 @@
 package main
 
 import (
-	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	_ "github.com/mattn/go-sqlite3"
-	"github.com/mdp/qrterminal/v3"
-	"github.com/rs/zerolog"
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/proto/waCompanionReg"
-	waStore "go.mau.fi/whatsmeow/store"
-	"go.mau.fi/whatsmeow/store/sqlstore"
-	waLog "go.mau.fi/whatsmeow/util/log"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/zhenzhu/watui/internal/config"
-	"github.com/zhenzhu/watui/internal/media"
 	"github.com/zhenzhu/watui/internal/player"
-	"github.com/zhenzhu/watui/internal/store"
+	"github.com/zhenzhu/watui/internal/profile"
 	"github.com/zhenzhu/watui/internal/ui"
-	"github.com/zhenzhu/watui/internal/wa"
 )
 
 var version = "dev"
@@ -34,25 +22,45 @@ var version = "dev"
 const usage = `watui — WhatsApp in the terminal, vim style
 
 usage:
-  watui          open the TUI (asks for a QR scan the first time)
-  watui login    link this computer to your phone (QR code)
-  watui logout   unlink this computer from your WhatsApp account
-  watui version  print the version
+  watui                  open the TUI with all profiles (asks for a QR scan the first time)
+  watui login            link the default profile (QR code)
+  watui add <name>       add another WhatsApp account as a profile (QR code)
+  watui profiles         list profiles
+  watui logout [name]    unlink a profile (default: "default")
+  watui version          print the version
+
+Inside watui: [1] Profiles box, gt/gT next/previous profile, :profile <name>.
 `
 
 func main() {
+	args := os.Args[1:]
 	cmd := ""
-	if len(os.Args) > 1 {
-		cmd = os.Args[1]
+	if len(args) > 0 {
+		cmd = args[0]
+	}
+	arg := ""
+	if len(args) > 1 {
+		arg = args[1]
 	}
 	var err error
 	switch cmd {
 	case "":
-		err = run(false)
+		err = run()
 	case "login":
-		err = run(true)
+		err = add(profile.Default)
+	case "add":
+		if arg == "" {
+			err = errors.New("usage: watui add <name>")
+		} else {
+			err = add(arg)
+		}
+	case "profiles":
+		err = listProfiles()
 	case "logout":
-		err = logout()
+		if arg == "" {
+			arg = profile.Default
+		}
+		err = logout(arg)
 	case "version", "-v", "--version":
 		fmt.Println("watui", version)
 	case "-h", "--help", "help":
@@ -80,127 +88,60 @@ func dataDir() (string, error) {
 	return dir, os.MkdirAll(dir, 0o700)
 }
 
-type app struct {
-	client *whatsmeow.Client
-	store  *store.Store
-	log    waLog.Logger
-	close  func()
-}
-
 func execOutput(name string, args ...string) (string, error) {
 	out, err := exec.Command(name, args...).Output()
 	return string(out), err
 }
 
-func open() (*app, error) {
-	dir, err := dataDir()
+func locked() (string, *instanceLock, error) {
+	root, err := dataDir()
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	lock, err := lockOrTakeOver(dir)
-	if err != nil {
-		return nil, err
-	}
-	logFile, err := os.OpenFile(filepath.Join(dir, "watui.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return nil, err
-	}
-	level := zerolog.WarnLevel
-	if os.Getenv("WATUI_DEBUG") != "" {
-		level = zerolog.DebugLevel
-	}
-	log := waLog.Zerolog(zerolog.New(logFile).Level(level).With().Timestamp().Logger())
-
-	waStore.SetOSInfo("watui", [3]uint32{0, 1, 0})
-	waStore.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
-	waStore.DeviceProps.RequireFullSync = proto.Bool(false)
-
-	ctx := context.Background()
-	container, err := sqlstore.New(ctx, "sqlite3", "file:"+filepath.Join(dir, "whatsapp.db")+"?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000", log.Sub("db"))
-	if err != nil {
-		return nil, fmt.Errorf("open whatsapp store: %w", err)
-	}
-	device, err := container.GetFirstDevice(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("load device: %w", err)
-	}
-
-	db, err := sql.Open("sqlite3", "file:"+filepath.Join(dir, "messages.db")+"?_journal_mode=WAL&_busy_timeout=5000")
-	if err != nil {
-		return nil, err
-	}
-	st, err := store.Open(db)
-	if err != nil {
-		return nil, fmt.Errorf("open message store: %w", err)
-	}
-
-	client := whatsmeow.NewClient(device, log.Sub("client"))
-	return &app{
-		client: client,
-		store:  st,
-		log:    log,
-		close: func() {
-			client.Disconnect()
-			_ = db.Close()
-			_ = container.Close()
-			_ = logFile.Close()
-			lock.release()
-		},
-	}, nil
+	lock, err := lockOrTakeOver(root)
+	return root, lock, err
 }
 
-func login(cli *whatsmeow.Client) error {
-	qrChan, err := cli.GetQRChannel(context.Background())
+func run() error {
+	root, lock, err := locked()
 	if err != nil {
 		return err
 	}
-	if err := cli.Connect(); err != nil {
-		return err
-	}
-	fmt.Println("On your phone: WhatsApp → Settings → Linked devices → Link a device, then scan:")
-	for evt := range qrChan {
-		switch evt.Event {
-		case "code":
-			fmt.Print("\033[H\033[2J")
-			fmt.Println("On your phone: WhatsApp → Settings → Linked devices → Link a device, then scan:")
-			fmt.Println()
-			qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-			fmt.Println("\nThe code refreshes every ~20 seconds. Ctrl+C to cancel.")
-		case "success":
-			fmt.Println("\nLinked! Loading your chats…")
-			return nil
-		case "timeout":
-			return errors.New("QR code timed out, run `watui login` again")
-		default:
-			if evt.Error != nil {
-				return evt.Error
-			}
+	defer lock.release()
+
+	var profiles []*profile.Profile
+	defer func() {
+		for _, p := range profiles {
+			p.Close()
 		}
+	}()
+	for _, name := range profile.List(root) {
+		p, err := profile.Open(root, name)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "watui:", err)
+			continue
+		}
+		profiles = append(profiles, p)
 	}
-	return errors.New("login cancelled")
-}
-
-func run(forceLogin bool) error {
-	a, err := open()
-	if err != nil {
-		return err
+	if len(profiles) == 0 {
+		return errors.New("no profile could be opened")
 	}
-	defer a.close()
 
-	client := wa.New(a.client, a.store, a.log)
-
-	if a.client.Store.ID == nil {
-		if err := login(a.client); err != nil {
+	anyLinked := false
+	for _, p := range profiles {
+		anyLinked = anyLinked || p.Linked()
+	}
+	if !anyLinked {
+		if err := profiles[0].Login(os.Stdout, nil); err != nil {
 			return err
 		}
 		time.Sleep(2 * time.Second)
-	} else {
-		if forceLogin {
-			fmt.Println("Already linked. Use `watui logout` first to link again.")
-			return nil
-		}
-		if err := a.client.Connect(); err != nil {
-			return fmt.Errorf("connect: %w", err)
+	}
+	for _, p := range profiles {
+		if p.Linked() && !p.WA.WA.IsConnected() {
+			if err := p.Connect(); err != nil {
+				p.Log.Errorf("connect: %v", err)
+			}
 		}
 	}
 
@@ -209,48 +150,131 @@ func run(forceLogin bool) error {
 		fmt.Fprintln(os.Stderr, "watui: config:", cfgErr)
 		time.Sleep(2 * time.Second)
 	}
-	images, err := media.NewManager(client.LoadImage, client.Notify)
-	if err != nil {
-		a.log.Warnf("images disabled: %v", err)
-		images = nil
-	}
-	if images != nil {
-		defer images.Close()
-	}
 
-	pl := player.New(client.Notify)
+	var prog *tea.Program
+	watch := func(p *profile.Profile) {
+		name := p.Name
+		go func() {
+			for range p.WA.Changed() {
+				time.Sleep(150 * time.Millisecond)
+				prog.Send(ui.ChangedMsg{Profile: name})
+			}
+		}()
+	}
+	pl := player.New(func() {
+		if prog != nil {
+			prog.Send(ui.ChangedMsg{})
+		}
+	})
 	defer pl.Stop()
 
-	p := tea.NewProgram(ui.New(client, cfg, images, pl), tea.WithAltScreen(), tea.WithReportFocus())
-	go func() {
-		for range client.Changed() {
-			time.Sleep(150 * time.Millisecond)
-			p.Send(ui.ChangedMsg{})
+	active := profiles[:0:0]
+	for _, p := range profiles {
+		if p.Linked() {
+			active = append(active, p)
 		}
-	}()
+	}
+	ordered := append(active, unlinked(profiles)...)
+	model := ui.New(ordered, cfg, pl, ui.Options{
+		Root: root,
+		Watch: func(p *profile.Profile) {
+			profiles = append(profiles, p)
+			watch(p)
+		},
+	})
+	prog = tea.NewProgram(model, tea.WithAltScreen(), tea.WithReportFocus())
+	for _, p := range profiles {
+		watch(p)
+	}
 	os.Stdout.WriteString("\x1b[?7l")
 	defer os.Stdout.WriteString("\x1b[?7h")
-	_, err = p.Run()
+	_, err = prog.Run()
 	return err
 }
 
-func logout() error {
-	a, err := open()
+func unlinked(ps []*profile.Profile) []*profile.Profile {
+	var out []*profile.Profile
+	for _, p := range ps {
+		if !p.Linked() {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func add(name string) error {
+	if err := profile.ValidName(name); err != nil {
+		return err
+	}
+	root, lock, err := locked()
 	if err != nil {
 		return err
 	}
-	defer a.close()
-	if a.client.Store.ID == nil {
-		fmt.Println("Not linked.")
+	defer lock.release()
+	p, err := profile.Open(root, name)
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+	if p.Linked() {
+		fmt.Printf("Profile %q is already linked. Use `watui logout %s` first to link again.\n", name, name)
 		return nil
 	}
-	if err := a.client.Connect(); err != nil {
+	if err := p.Login(os.Stdout, nil); err != nil {
+		if name != profile.Default {
+			p.Close()
+			_ = profile.Remove(root, name)
+		}
+		return err
+	}
+	time.Sleep(3 * time.Second)
+	fmt.Printf("Profile %q is ready. Run watui to use it.\n", name)
+	return nil
+}
+
+func listProfiles() error {
+	root, err := dataDir()
+	if err != nil {
+		return err
+	}
+	for _, name := range profile.List(root) {
+		dir := profile.DirFor(root, name)
+		label := name
+		if data, err := os.ReadFile(filepath.Join(dir, "label")); err == nil {
+			label = fmt.Sprintf("%s (%s)", strings.TrimSpace(string(data)), name)
+		}
+		_, err := os.Stat(filepath.Join(dir, "whatsapp.db"))
+		state := "not linked"
+		if err == nil {
+			state = "has login data"
+		}
+		fmt.Printf("  %-28s %s\n", label, state)
+	}
+	return nil
+}
+
+func logout(name string) error {
+	root, lock, err := locked()
+	if err != nil {
+		return err
+	}
+	defer lock.release()
+	p, err := profile.Open(root, name)
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+	if !p.Linked() {
+		fmt.Printf("Profile %q is not linked.\n", name)
+		return nil
+	}
+	if err := p.Connect(); err != nil {
 		return err
 	}
 	time.Sleep(2 * time.Second)
-	if err := a.client.Logout(context.Background()); err != nil {
+	if err := p.Logout(); err != nil {
 		return err
 	}
-	fmt.Println("Unlinked. Saved chats stay in ~/.local/share/watui (delete that folder to remove them).")
+	fmt.Printf("Unlinked profile %q. Its saved chats stay in %s.\n", name, profile.DirFor(root, name))
 	return nil
 }

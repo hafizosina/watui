@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
@@ -57,6 +58,12 @@ type Manager struct {
 	nextID  uint32
 }
 
+var imageIDs atomic.Uint32
+
+func init() {
+	imageIDs.Store(uint32(time.Now().UnixNano()%100000) + 1000)
+}
+
 func NewManager(load Loader, notify func()) (*Manager, error) {
 	base := os.Getenv("XDG_CACHE_HOME")
 	if base == "" {
@@ -82,7 +89,6 @@ func NewManager(load Loader, notify func()) (*Manager, error) {
 		inTmux:   os.Getenv("TMUX") != "",
 		sem:      make(chan struct{}, 3),
 		entries:  map[string]*entry{},
-		nextID:   uint32(time.Now().UnixNano()%100000) + 1000,
 	}, nil
 }
 
@@ -137,10 +143,13 @@ func (m *Manager) prepare(chatJID, msgID string, q Quality, box Box) (uint32, in
 		w, h = img.Bounds().Dx(), img.Bounds().Dy()
 	}
 	cols, rows := fit(w, h, box, cellRatio())
-	m.mu.Lock()
-	m.nextID++
-	id := m.nextID
-	m.mu.Unlock()
+	id := imageIDs.Add(1)
+	if m.nextID != 0 {
+		m.mu.Lock()
+		m.nextID++
+		id = m.nextID
+		m.mu.Unlock()
+	}
 	seq := ansi.KittyGraphics([]byte(base64.StdEncoding.EncodeToString([]byte(path))),
 		"a=T", "U=1", "f=100", "t=f", "q=2",
 		fmt.Sprintf("i=%d", id), fmt.Sprintf("c=%d", cols), fmt.Sprintf("r=%d", rows))
