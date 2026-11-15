@@ -27,12 +27,15 @@ import (
 	"github.com/zhenzhu/watui/internal/wa"
 )
 
+var version = "dev"
+
 const usage = `watui — WhatsApp in the terminal, vim style
 
 usage:
   watui          open the TUI (asks for a QR scan the first time)
   watui login    link this computer to your phone (QR code)
   watui logout   unlink this computer from your WhatsApp account
+  watui version  print the version
 `
 
 func main() {
@@ -48,6 +51,8 @@ func main() {
 		err = run(true)
 	case "logout":
 		err = logout()
+	case "version", "-v", "--version":
+		fmt.Println("watui", version)
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 	default:

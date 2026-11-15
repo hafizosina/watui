@@ -1,0 +1,31 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        env:
+          CGO_ENABLED: "1"
+        run: go build -ldflags "-s -w -X main.version=${GITHUB_SHA::7}" -o bin/watui ./cmd/watui
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: watui-linux-amd64
+          path: bin/watui

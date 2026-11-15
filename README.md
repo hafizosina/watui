@@ -11,7 +11,7 @@ It uses [whatsmeow](https://github.com/tulir/whatsmeow) to talk to WhatsApp. Tha
 You need Go 1.23+ (`/usr/local/go`) and gcc (for SQLite).
 
 ```bash
-make install        # builds and copies the binary to ~/.local/bin/watui
+make deploy         # tests, builds, copies to ~/App/WaTui and links ~/.local/bin/watui
 ```
 
 ## First run
@@ -143,5 +143,14 @@ internal/ui/       Bubble Tea UI: panels, chat list, messages, message menu, vim
 ```bash
 make test       # go test ./...
 make build      # bin/watui
-make install    # ~/.local/bin/watui
+make deploy     # ~/App/WaTui/watui + ~/.local/bin/watui symlink
 ```
+
+Two commands:
+
+| Command | Runs |
+|---|---|
+| `watui` | the deployed build in `~/App/WaTui` (update it with `make deploy`) |
+| `watuidev` | the code in this folder, rebuilt on every start (script in `~/.local/bin/watuidev`) |
+
+Both use the same login and chats (`~/.local/share/watui`), so don't run them at the same time: WhatsApp drops one of them.
