@@ -12,6 +12,7 @@ func (m *Model) setTheme(name string) error {
 		return err
 	}
 	ApplyTheme(t)
+	m.blocks = map[string]cachedBlock{}
 	m.renderMessages(false)
 	return nil
 }

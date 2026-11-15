@@ -250,6 +250,25 @@ func (m *Model) openMessageMenu() {
 			return nil
 		}})
 	}
+	if msg.QuoteID != "" {
+		target := msg.QuoteID
+		items = append(items, menuItem{label: "Go to replied message", key: "g", run: func(m *Model) tea.Cmd {
+			m.jumpToMessage(target)
+			return nil
+		}})
+	}
+	if replies := m.repliesTo(msg.ID); len(replies) == 1 {
+		target := replies[0].ID
+		items = append(items, menuItem{label: "Go to reply", key: "G", run: func(m *Model) tea.Cmd {
+			m.jumpToMessage(target)
+			return nil
+		}})
+	} else if len(replies) > 1 {
+		items = append(items, menuItem{label: fmt.Sprintf("Replies (%d)…", len(replies)), key: "G", run: func(m *Model) tea.Cmd {
+			m.openRepliesMenu(replies)
+			return nil
+		}})
+	}
 	if !msg.Deleted {
 		items = append(items, menuItem{label: "Reply", key: "r", run: func(m *Model) tea.Cmd {
 			m.replyTo, m.editing = &msg, nil
@@ -586,4 +605,48 @@ func viewFileCmd(path string) tea.Cmd {
 		}
 		return nil
 	})
+}
+
+func (m Model) repliesTo(id string) []store.Message {
+	var out []store.Message
+	for _, msg := range m.messages {
+		if msg.QuoteID == id && !msg.Deleted {
+			out = append(out, msg)
+		}
+	}
+	return out
+}
+
+func (m *Model) jumpToMessage(id string) {
+	for i, msg := range m.messages {
+		if msg.ID == id {
+			m.sel = i
+			m.focus = focusChat
+			m.renderMessages(false)
+			m.revealSelection()
+			return
+		}
+	}
+	m.setFlash("that message is older than what's loaded here", true)
+}
+
+func (m *Model) openRepliesMenu(replies []store.Message) {
+	chat, _ := m.openChat()
+	var items []menuItem
+	for _, r := range replies {
+		r := r
+		who := "You"
+		if !r.FromMe {
+			who = m.names[m.openJID]
+			if chat.IsGroup {
+				who = m.wa.ContactName(r.SenderJID, r.SenderName)
+			}
+		}
+		text := ansi.Truncate(strings.ReplaceAll(sanitize(r.Text), "\n", " "), 40, "…")
+		items = append(items, menuItem{label: sanitize(who) + " " + r.TS.Local().Format("15:04") + " · " + text, run: func(m *Model) tea.Cmd {
+			m.jumpToMessage(r.ID)
+			return nil
+		}})
+	}
+	m.menu = &menu{title: fmt.Sprintf("Replies (%d)", len(replies)), items: items}
 }

@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS messages_chat_ts ON messages (chat_jid, ts);
 CREATE INDEX IF NOT EXISTS messages_id ON messages (id);
+CREATE INDEX IF NOT EXISTS messages_unread ON messages (chat_jid) WHERE read = 0 AND from_me = 0;
 `
 
 func Open(db *sql.DB) (*Store, error) {
@@ -408,6 +409,12 @@ func (s *Store) RecentMedia(kind string, limit int) ([]Message, error) {
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+func (s *Store) CountMessages(jid string) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE chat_jid = ?`, jid).Scan(&n)
+	return n, err
 }
 
 func (s *Store) Media(chatJID, id string) (string, []byte, error) {

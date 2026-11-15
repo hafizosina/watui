@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -515,4 +516,68 @@ func TestViewProfileFromMessage(t *testing.T) {
 	if m.menu == nil || !strings.Contains(strings.Join(labelsOf(m.menu.items), "|"), "View profile · Sari") {
 		t.Fatalf("a group message should open the sender's profile, got %v", labelsOf(m.menu.items))
 	}
+}
+
+func TestReplyJumps(t *testing.T) {
+	m := testModel(t)
+	chat := "628111@s.whatsapp.net"
+	for i, r := range []struct{ id, text string }{{"R1", "setuju"}, {"R2", "aku juga"}} {
+		if err := m.wa.Store.PutMessage(store.Message{ChatJID: chat, ID: r.id, SenderJID: chat, TS: time.Now().Add(time.Duration(i+1) * time.Minute),
+			Text: r.text, QuoteID: "1", QuoteSender: chat, QuoteText: "Halo, besok jadi meeting?", Read: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m = step(m, tea.WindowSizeMsg{Width: 110, Height: 40}, ChangedMsg{}, key("j"), key("enter"))
+	if !strings.Contains(m.vp.View(), "↩ 2 replies") {
+		t.Fatal("the original message should show how many replies it has")
+	}
+	m = step(m, key(" "))
+	if !strings.Contains(strings.Join(labelsOf(m.menu.items), "|"), "Go to replied message") {
+		t.Fatalf("a reply should offer Go to replied message, got %v", labelsOf(m.menu.items))
+	}
+	m = step(m, key("g"))
+	if m.messages[m.sel].ID != "1" {
+		t.Fatalf("g should jump to the quoted original, got %s", m.messages[m.sel].ID)
+	}
+	m = step(m, key(" "), key("G"))
+	if m.menu == nil || m.menu.title != "Replies (2)" || len(m.menu.items) != 2 {
+		t.Fatalf("original with 2 replies should list them, got %+v", m.menu)
+	}
+	m = step(m, key("enter"))
+	if m.messages[m.sel].ID != "R1" {
+		t.Fatalf("picking a reply should jump to it, got %s", m.messages[m.sel].ID)
+	}
+	checkFrame(t, m.View(), 110, 40)
+}
+
+func TestLoadOlderMessages(t *testing.T) {
+	m := testModel(t)
+	chat := "628999@s.whatsapp.net"
+	base := time.Now().Add(-10 * time.Hour)
+	for i := 0; i < 450; i++ {
+		if err := m.wa.Store.PutMessage(store.Message{ChatJID: chat, ID: fmt.Sprintf("M%03d", i), SenderJID: chat, TS: base.Add(time.Duration(i) * time.Minute), Text: fmt.Sprintf("pesan %d", i), Read: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m = step(m, tea.WindowSizeMsg{Width: 110, Height: 34}, ChangedMsg{})
+	m.open(chat)
+	m.focus = focusChat
+	if len(m.messages) != firstPage || m.messages[len(m.messages)-1].ID != "M449" {
+		t.Fatalf("opening should load the newest %d messages, got %d", firstPage, len(m.messages))
+	}
+	m.sel = 0
+	m.renderMessages(false)
+	m.revealSelection()
+	m = step(m, key("k"))
+	if len(m.messages) != firstPage+olderPage-50 || m.messages[m.sel].ID != "M250" {
+		t.Fatalf("k at the top should load older messages and keep the selection, got %d msgs, sel %s", len(m.messages), m.messages[m.sel].ID)
+	}
+	m = step(m, key("g"), key("g"))
+	if m.messages[0].ID != "M000" || m.sel != 0 {
+		t.Fatalf("gg should load everything back to the first message, got %s", m.messages[0].ID)
+	}
+	m = step(m, key("G"))
+	m.vp.SetYOffset(0)
+	m.renderMessages(false)
+	checkFrame(t, m.View(), 110, 34)
 }

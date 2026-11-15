@@ -128,6 +128,8 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 |---|---|---|
 | View profile | `i` | who sent it (your own message → My profile) |
 | Expand / Collapse | `z` | only on long messages (folded after `collapse_lines`) |
+| Go to replied message | `g` | on a reply: jumps to the message it answers |
+| Go to reply / Replies (N)… | `G` | on a message that got replies (shown as `↩ 2 replies`): jump to the reply, or pick from the list |
 | Reply | `r` | the quote shows in the Compose title; `Esc` (in normal mode) cancels |
 | Edit | `e` | your own text messages, first 15 minutes |
 | React | `+` | 👍 ❤️ 😂 😮 😢 🙏 🔥 🎉, or remove yours |

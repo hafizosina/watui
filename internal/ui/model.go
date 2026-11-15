@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -48,7 +49,10 @@ const (
 	focusProfiles
 )
 
-const messageLimit = 1000
+const (
+	firstPage = 200
+	olderPage = 300
+)
 
 type ChangedMsg struct {
 	Profile string
@@ -108,6 +112,8 @@ type Model struct {
 	ringing      *ringing
 	emojiSel     int
 	cmdSel       int
+	loaded       int
+	blocks       map[string]cachedBlock
 	cmdTyped     string
 	stickers     *stickerPicker
 	emojiHidden  string
@@ -153,6 +159,7 @@ func newModel(client *wa.Client, cfg config.Config, images *media.Manager, pl *p
 		shownImages: map[string]media.Quality{},
 		expanded:    map[string]bool{},
 		unread:      map[string]int{},
+		blocks:      map[string]cachedBlock{},
 		foldable:    map[string]bool{},
 		vp:          viewport.New(0, 0),
 		input:       in,
@@ -287,7 +294,7 @@ func (m *Model) refresh() {
 	}
 	m.applyFilter()
 	if m.openJID != "" {
-		msgs, err := m.wa.Store.Messages(m.openJID, messageLimit)
+		msgs, err := m.wa.Store.Messages(m.openJID, max(m.loaded, firstPage))
 		if err != nil {
 			m.setFlash("load messages: "+err.Error(), true)
 			return
@@ -425,7 +432,8 @@ func (m *Model) open(jid string) {
 		}
 	}
 	m.openJID = jid
-	msgs, err := m.wa.Store.Messages(jid, messageLimit)
+	m.loaded = firstPage
+	msgs, err := m.wa.Store.Messages(jid, m.loaded)
 	if err != nil {
 		m.setFlash("load messages: "+err.Error(), true)
 	}
@@ -522,4 +530,34 @@ func (m Model) editorCmd() tea.Cmd {
 		data, err := os.ReadFile(path)
 		return editorDoneMsg{text: string(data), err: err}
 	})
+}
+
+// loadOlder fetches older messages when the top of the loaded history is reached.
+func (m *Model) loadOlder() bool {
+	if m.openJID == "" || len(m.messages) < m.loaded {
+		return false
+	}
+	total, err := m.wa.Store.CountMessages(m.openJID)
+	if err != nil || total <= len(m.messages) {
+		return false
+	}
+	keep := ""
+	if cur, ok := m.selected(); ok {
+		keep = cur.ID
+	}
+	m.loaded += olderPage
+	msgs, err := m.wa.Store.Messages(m.openJID, m.loaded)
+	if err != nil {
+		return false
+	}
+	m.messages = msgs
+	for i, msg := range msgs {
+		if msg.ID == keep {
+			m.sel = i
+		}
+	}
+	m.renderMessages(false)
+	m.revealSelection()
+	m.setFlash(fmt.Sprintf("loaded older messages (%d of %d)", len(msgs), total), false)
+	return true
 }

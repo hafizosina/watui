@@ -376,6 +376,9 @@ func (m *Model) moveSelection(delta int) {
 			return
 		}
 	}
+	if m.sel+delta < 0 && m.loadOlder() {
+		return
+	}
 	next := max(0, min(len(m.messages)-1, m.sel+delta))
 	if next == m.sel {
 		return
@@ -416,6 +419,8 @@ func (m *Model) top() {
 		m.cursor = 0
 		m.clampCursor()
 		return
+	}
+	for m.loadOlder() && len(m.messages) < 5000 {
 	}
 	m.sel = 0
 	m.renderMessages(false)

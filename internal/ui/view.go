@@ -340,6 +340,12 @@ func (m *Model) renderMessages(forceBottom bool) {
 	showSel := m.focus == focusChat && m.mode == modeNormal
 	marker := lipgloss.NewStyle().Foreground(colBlue).Bold(true).Render("▌")
 
+	replyCount := map[string]int{}
+	for _, msg := range m.messages {
+		if msg.QuoteID != "" && !msg.Deleted {
+			replyCount[msg.QuoteID]++
+		}
+	}
 	var lines []string
 	m.spans = make([][2]int, len(m.messages))
 	var prev *store.Message
@@ -358,35 +364,55 @@ func (m *Model) renderMessages(forceBottom bool) {
 		if newGroup && !newDay {
 			lines = append(lines, "")
 		}
-		bodyW := w
-		if msg.FromMe {
-			bodyW = max(24, w*7/10)
-		}
-		var content []string
-		if newGroup {
-			nameStyle := lipgloss.NewStyle().Foreground(senderColor(msg.SenderJID)).Bold(true)
-			if msg.FromMe {
-				nameStyle = styleMe
+		key := m.blockKey(msg, newGroup, w, replyCount[msg.ID])
+		var block []string
+		if c, ok := m.blocks[msg.ID]; ok && c.key == key && key != "" {
+			block = c.lines
+			if c.foldable {
+				m.foldable[msg.ID] = true
 			}
-			content = append(content, nameStyle.Render(nameOf(msg))+" "+styleDim.Render(msg.TS.Local().Format("15:04")))
+		} else {
+			bodyW := w
+			if msg.FromMe {
+				bodyW = max(24, w*7/10)
+			}
+			var content []string
+			if newGroup {
+				nameStyle := lipgloss.NewStyle().Foreground(senderColor(msg.SenderJID)).Bold(true)
+				if msg.FromMe {
+					nameStyle = styleMe
+				}
+				content = append(content, nameStyle.Render(nameOf(msg))+" "+styleDim.Render(msg.TS.Local().Format("15:04")))
+			}
+			if msg.Forwarded && !msg.Deleted {
+				content = append(content, styleDim.Italic(true).Render("↪ forwarded"))
+			}
+			if msg.QuoteID != "" && !msg.Deleted {
+				qbar := lipgloss.NewStyle().Foreground(senderColor(msg.QuoteSender)).Render("┃ ")
+				who := lipgloss.NewStyle().Foreground(senderColor(msg.QuoteSender)).Bold(true).Render(nameOfJID(msg.QuoteSender, ""))
+				quoted := ansi.Truncate(strings.ReplaceAll(sanitize(msg.QuoteText), "\n", " "), max(10, bodyW-8), "…")
+				content = append(content, qbar+who, qbar+styleDim.Render(quoted))
+			}
+			q, show := m.shownImages[msg.ID]
+			for _, l := range strings.Split(m.renderBody(msg, bodyW, show, q), "\n") {
+				content = append(content, strings.TrimPrefix(l, "   "))
+			}
+			if r := reactionLine(msg.Reactions); r != "" {
+				content = append(content, r)
+			}
+			if n := replyCount[msg.ID]; n > 0 {
+				label := "↩ 1 reply"
+				if n > 1 {
+					label = fmt.Sprintf("↩ %d replies", n)
+				}
+				content = append(content, styleDim.Render(label))
+			}
+			block = m.bubble(content, msg, w)
+			if key != "" {
+				m.blocks[msg.ID] = cachedBlock{key: key, lines: block, foldable: m.foldable[msg.ID]}
+			}
 		}
-		if msg.Forwarded && !msg.Deleted {
-			content = append(content, styleDim.Italic(true).Render("↪ forwarded"))
-		}
-		if msg.QuoteID != "" && !msg.Deleted {
-			qbar := lipgloss.NewStyle().Foreground(senderColor(msg.QuoteSender)).Render("┃ ")
-			who := lipgloss.NewStyle().Foreground(senderColor(msg.QuoteSender)).Bold(true).Render(nameOfJID(msg.QuoteSender, ""))
-			quoted := ansi.Truncate(strings.ReplaceAll(sanitize(msg.QuoteText), "\n", " "), max(10, bodyW-8), "…")
-			content = append(content, qbar+who, qbar+styleDim.Render(quoted))
-		}
-		q, show := m.shownImages[msg.ID]
-		for _, l := range strings.Split(m.renderBody(msg, bodyW, show, q), "\n") {
-			content = append(content, strings.TrimPrefix(l, "   "))
-		}
-		if r := reactionLine(msg.Reactions); r != "" {
-			content = append(content, r)
-		}
-		block := m.bubble(content, msg, w)
+		block = append([]string(nil), block...)
 		if showSel && i == m.sel {
 			for j, l := range block {
 				block[j] = marker + strings.TrimPrefix(l, " ")
@@ -405,6 +431,37 @@ func (m *Model) renderMessages(forceBottom bool) {
 	if atBottom {
 		m.vp.GotoBottom()
 	}
+}
+
+type cachedBlock struct {
+	key      string
+	lines    []string
+	foldable bool
+}
+
+// blockKey fingerprints everything that changes how a message looks; "" means don't cache.
+func (m Model) blockKey(msg store.Message, newGroup bool, w, replies int) string {
+	if m.player != nil {
+		if st, ok := m.player.State(); ok && st.MsgID == msg.ID {
+			return ""
+		}
+	}
+	img := ""
+	if q, ok := m.shownImages[msg.ID]; ok && m.images != nil {
+		lines, status, _ := m.images.Lines(msg.ID, q)
+		img = fmt.Sprintf("%d:%d:%s", q, len(lines), status)
+		if len(lines) > 0 {
+			img += lines[0][:min(len(lines[0]), 24)]
+		}
+	}
+	reactions := make([]string, 0, len(msg.Reactions))
+	for who, e := range msg.Reactions {
+		reactions = append(reactions, who+"="+e)
+	}
+	sort.Strings(reactions)
+	return fmt.Sprintf("%d|%t|%s|%d|%t|%t|%t|%t|%s|%s|%s|%s|%d|%t|%s|%s",
+		w, newGroup, msg.Text, msg.Status, msg.Edited, msg.Deleted, msg.Starred, msg.Forwarded,
+		msg.QuoteID, msg.QuoteText, strings.Join(reactions, ","), msg.MediaType, replies, m.expanded[msg.ID], img, msg.SenderName)
 }
 
 // bubble frames one message: others get a bar in their color on the left,
