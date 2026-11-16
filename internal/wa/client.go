@@ -45,6 +45,7 @@ type Client struct {
 	syncing  bool
 	lastSync time.Time
 	groups   map[types.JID]bool
+	mentions map[string]mentionName
 }
 
 func New(wa *whatsmeow.Client, st *store.Store, log waLog.Logger) *Client {

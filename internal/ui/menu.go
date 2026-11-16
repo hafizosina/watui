@@ -642,7 +642,7 @@ func (m *Model) openRepliesMenu(replies []store.Message) {
 				who = m.wa.ContactName(r.SenderJID, r.SenderName)
 			}
 		}
-		text := ansi.Truncate(strings.ReplaceAll(sanitize(r.Text), "\n", " "), 40, "…")
+		text := ansi.Truncate(strings.ReplaceAll(sanitize(m.withNames(r.Text)), "\n", " "), 40, "…")
 		items = append(items, menuItem{label: sanitize(who) + " " + r.TS.Local().Format("15:04") + " · " + text, run: func(m *Model) tea.Cmd {
 			m.jumpToMessage(r.ID)
 			return nil

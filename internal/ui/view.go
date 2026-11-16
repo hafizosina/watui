@@ -171,7 +171,7 @@ func (m Model) composeTitle() string {
 		if !m.replyTo.FromMe {
 			who = m.wa.ContactName(m.replyTo.SenderJID, m.replyTo.SenderName)
 		}
-		return "[4] Replying to " + sanitize(who) + ": " + strings.ReplaceAll(sanitize(m.replyTo.Text), "\n", " ")
+		return "[4] Replying to " + sanitize(who) + ": " + strings.ReplaceAll(sanitize(m.withNames(m.replyTo.Text)), "\n", " ")
 	}
 	return "[4] Compose"
 }
@@ -287,7 +287,7 @@ func (m Model) chatRow(c store.Chat, selected bool, w int) string {
 			badge = styleBadge.Render(n)
 		}
 	}
-	preview := strings.ReplaceAll(sanitize(c.LastText), "\n", " ")
+	preview := strings.ReplaceAll(sanitize(m.withNames(c.LastText)), "\n", " ")
 	preview = ansi.Truncate(preview, max(1, w-3-lipgloss.Width(badge)), "…")
 	gap2 := max(0, w-2-lipgloss.Width(preview)-lipgloss.Width(badge))
 	line2 := paint(lipgloss.NewStyle(), " ") + paint(styleDim, preview) +
@@ -390,7 +390,7 @@ func (m *Model) renderMessages(forceBottom bool) {
 			if msg.QuoteID != "" && !msg.Deleted {
 				qbar := lipgloss.NewStyle().Foreground(senderColor(msg.QuoteSender)).Render("┃ ")
 				who := lipgloss.NewStyle().Foreground(senderColor(msg.QuoteSender)).Bold(true).Render(nameOfJID(msg.QuoteSender, ""))
-				quoted := ansi.Truncate(strings.ReplaceAll(sanitize(msg.QuoteText), "\n", " "), max(10, bodyW-8), "…")
+				quoted := ansi.Truncate(strings.ReplaceAll(sanitize(m.withNames(msg.QuoteText)), "\n", " "), max(10, bodyW-8), "…")
 				content = append(content, qbar+who, qbar+styleDim.Render(quoted))
 			}
 			q, show := m.shownImages[msg.ID]
@@ -460,8 +460,8 @@ func (m Model) blockKey(msg store.Message, newGroup bool, w, replies int) string
 	}
 	sort.Strings(reactions)
 	return fmt.Sprintf("%d|%t|%s|%d|%t|%t|%t|%t|%s|%s|%s|%s|%d|%t|%s|%s",
-		w, newGroup, msg.Text, msg.Status, msg.Edited, msg.Deleted, msg.Starred, msg.Forwarded,
-		msg.QuoteID, msg.QuoteText, strings.Join(reactions, ","), msg.MediaType, replies, m.expanded[msg.ID], img, msg.SenderName)
+		w, newGroup, m.withNames(msg.Text), msg.Status, msg.Edited, msg.Deleted, msg.Starred, msg.Forwarded,
+		msg.QuoteID, m.withNames(msg.QuoteText), strings.Join(reactions, ","), msg.MediaType, replies, m.expanded[msg.ID], img, msg.SenderName)
 }
 
 // bubble frames one message: others get a bar in their color on the left,
@@ -558,6 +558,7 @@ func (m Model) renderBody(msg store.Message, w int, showImage bool, q media.Qual
 	if msg.Deleted {
 		return "   " + styleDeleted.Render("message deleted")
 	}
+	msg.Text = m.withNames(msg.Text)
 	text := sanitize(msg.Text)
 	if msg.MediaType == wa.MediaAudio {
 		return m.audioLine(msg, text) + m.suffix(msg)
@@ -776,12 +777,12 @@ func helpView(w int) string {
 		{"/", "search chats (esc clears)"},
 		{"A", "toggle archived chats"},
 		{"n", "new chat / new group (search contacts or type a number)"},
-		{"space", "chat menu: pin, mute, archive, read/unread, delete, leave"},
+		{"space", "chat menu: info, pin, mute, archive, read/unread, delete, leave"},
 		{"", ""},
 		{"", "Messages"},
 		{"j / k", "select next / previous message"},
 		{"ctrl+d / ctrl+u", "jump 10 messages"},
-		{"gg / G", "oldest / newest"},
+		{"gg / G", "oldest loaded (again: load older) / newest"},
 		{"space", "message menu"},
 		{"i / a / enter", "start typing"},
 		{"e", "write the message in $EDITOR"},
@@ -791,8 +792,9 @@ func helpView(w int) string {
 		{"ctrl+n / ctrl+p", "next / previous option"},
 		{"enter", "pick option (or press its letter)"},
 		{"esc", "close"},
-		{"options", "expand/collapse z · reply r · edit e · react + · show/hide image v"},
-		{" ", "play/pause o · speed . · stop x · save S · open image o"},
+		{"options", "view profile i · expand/collapse z · replied message g · replies G"},
+		{" ", "reply r · edit e · react + · show/hide image v · view in nvim v"},
+		{" ", "play/pause o · speed . · stop x · open file/image o · save S"},
 		{" ", "copy y · forward f · star s · pin p · delete d"},
 		{"", ""},
 		{"", "Global"},
@@ -802,6 +804,8 @@ func helpView(w int) string {
 		{"ctrl+h / ctrl+l", "chats / messages (then tmux pane)"},
 		{"ctrl+j / ctrl+k", "messages ↔ compose (then tmux pane)"},
 		{"J / K", "open next / previous chat"},
+		{"ctrl+t", "sticker picker"},
+		{"ctrl+x", "decline a ringing call"},
 		{":", "command line"},
 		{"?", "keybindings"},
 		{"", ""},
@@ -824,6 +828,8 @@ func helpView(w int) string {
 		{":archived", "toggle archived view"},
 		{":theme [name]", "pick a color theme (j/k previews)"},
 		{":new", "new chat / new group"},
+		{":info  :me", "open chat's details / your profile"},
+		{":sticker", "send a recent sticker"},
 		{":set images=off", "always | thumbnail | off"},
 		{":set", "show settings"},
 		{":read", "mark chat read"},

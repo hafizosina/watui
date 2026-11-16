@@ -38,9 +38,11 @@ It shows a QR code. On your phone: **WhatsApp → Settings → Linked devices �
 Other commands:
 
 ```bash
-watui login     # link the default profile again (after logout)
-watui add work  # link another account as profile "work"
-watui logout    # unlink this computer
+watui login          # link the default profile again (after logout)
+watui add work       # link another account as profile "work"
+watui profiles       # list profiles
+watui logout [name]  # unlink this computer (default profile if no name)
+watui version        # print the version
 ```
 
 ## Profiles (several WhatsApp accounts)
@@ -72,9 +74,9 @@ The screen has two panes: **chat list** (left) and **messages** (right). `Tab` s
 | | `/` | search chats |
 | | `A` | show archived chats (or `Enter` on the ** Archived (N)** row at the top; **← Back to chats** returns) |
 | | `n` | new chat / new group (also `:new`) |
-| | `Space` | chat menu: Open · Pin · Mute (8h / 1 week / always) · Archive · Mark read/unread · Copy number · Leave group · Delete chat |
+| | `Space` | chat menu: Open · Contact / Group info · Pin · Mute (8h / 1 week / always) · Archive · Mark read/unread · Copy number · Leave group · Delete chat |
 | NORMAL (messages) | `j` / `k` | select next / previous message |
-| | `Ctrl+d` / `Ctrl+u`, `gg` / `G` | jump |
+| | `Ctrl+d` / `Ctrl+u`, `gg` / `G` | jump (a chat opens with its newest 200 messages; `k` or `gg` at the top loads older ones) |
 | | `Space` | message menu (like right-click) |
 | | `i` / `a` / `Enter` | type a message |
 | | `e` | write the message in `$EDITOR` (nvim) |
@@ -82,7 +84,10 @@ The screen has two panes: **chat list** (left) and **messages** (right). `Tab` s
 | anywhere | `Ctrl+h` / `Ctrl+l` | Chats / Messages box; at the edge, the tmux pane next door |
 | | `Ctrl+j` / `Ctrl+k` | Messages ↔ Compose (Compose opens in NORMAL; from Compose only in NORMAL); at the edge, the tmux pane above/below |
 | | `J` / `K` | next / previous chat |
+| | `Ctrl+t` | sticker picker (Messages or Compose) |
+| | `Ctrl+x` | decline a ringing call |
 | | `:` | command line |
+| | `?` | keybindings |
 | Compose | `Ctrl+s` | send (from any vim mode) |
 | | `Ctrl+e` | edit in `$EDITOR` |
 
@@ -106,6 +111,10 @@ Shown in the [3] box in place of the messages (`Esc` goes back), with the profil
 | Messages → `Space` on any message → **View profile** (`i`) | the sender's details (your own message → My profile) |
 
 In group info: `j`/`k` move through members, `Enter` opens a chat with them, `Space` shows their details, `y` copies their number. In contact info, `Enter` opens the chat. No picture? A colored avatar with initials is shown instead.
+
+### Mentions
+
+WhatsApp sends an @mention as a hidden ID (`@197426845585449`). watui shows the name instead, like the phone: your contact name, else their WhatsApp name, else their number; `@You` for you. An ID it can't match yet (contacts still syncing) stays as-is and is tried again a minute later.
 
 ### Emoji and stickers
 
@@ -150,7 +159,19 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 
 While typing after `:`, a popup suggests commands (with a short description) and their arguments — theme names, profile names, `:set` keys and values. `Tab`/`Ctrl+n` completes and cycles, `Shift+Tab`/`Ctrl+p` goes back, `Enter` runs.
 
-Commands: `:pause` `:speed` `:stop` (playing voice note), `:pin` `:unpin` `:mute` `:unmute` `:archive` `:unarchive` `:archived` `:read` `:q`
+| Command | Does |
+|---|---|
+| `:new` | new chat / new group |
+| `:info` · `:me` | details of the open chat · your own profile |
+| `:profile <name>` · `:profile add <name>` · `:profile rename <name> <label>` | switch, add or rename a profile |
+| `:theme [name]` | theme picker, or switch directly |
+| `:sticker` | send a recent sticker |
+| `:pin` `:unpin` · `:mute` `:unmute` · `:archive` `:unarchive` | the open chat |
+| `:archived` | show / hide archived chats |
+| `:read` | mark the open chat read |
+| `:pause` · `:speed` · `:stop` | the playing voice note |
+| `:set` · `:set key=value` | show settings · change one for this session |
+| `:help` · `:q` | keybindings · quit |
 
 ## Settings
 
@@ -158,6 +179,7 @@ Commands: `:pause` `:speed` `:stop` (playing voice note), `:pin` `:unpin` `:mute
 
 ```
 images = always        # always | thumbnail | off
+theme = tokyonight     # see Themes below
 image_width = 40       # biggest picture size, in terminal cells
 image_height = 15
 collapse_lines = 15    # long messages fold after this many lines (0 = never)
@@ -211,8 +233,11 @@ With vim-tmux-navigator, tmux steals `Ctrl+h`/`Ctrl+l` unless watui is in its vi
 | `whatsapp.db` | your link keys (anyone with this file can read your chats, so keep it private) |
 | `messages.db` | message history shown in the app |
 | `watui.log` | errors (`WATUI_DEBUG=1 watui` logs more) |
+| `profiles/<name>/` | the same files for each extra profile |
 
-Downloaded pictures are cached in `~/.cache/watui/images/` (safe to delete).
+`~/.cache/watui/` (safe to delete): `images/` (pictures, animated stickers/GIF frames), `media/` (downloaded videos, voice notes, documents), `sounds/` (notification sounds).
+
+Saved files (`S` in the message menu) go to `~/Downloads/WhatsApp/`.
 
 ## Not supported yet
 
@@ -231,12 +256,16 @@ go get go.mau.fi/whatsmeow@latest && go mod tidy && make install
 ## Project layout
 
 ```
-cmd/watui/         entry point: login (QR), logout, starts the TUI
-internal/wa/       whatsmeow wrapper: events → local store, send/edit/delete/react/forward/star/pin
+cmd/watui/         entry point: subcommands, QR login, single-instance lock and takeover, starts the TUI
+internal/wa/       whatsmeow wrapper: events → local store, send/edit/delete/react/forward/star/pin, calls, contact/group info, media download
 internal/store/    SQLite message store (messages.db)
-internal/media/    picture download, cache and kitty graphics (Unicode placeholders, tmux passthrough)
+internal/media/    picture cache and kitty graphics (Unicode placeholders, tmux passthrough, animation)
+internal/profile/  several WhatsApp accounts, each with its own client and store
+internal/notify/   desktop notifications (notify-send) and sounds
+internal/player/   voice note / video playback via mpv
 internal/config/   ~/.config/watui/config
-internal/ui/       Bubble Tea UI: panels, chat list, messages, message menu, vim compose editor
+internal/ui/       Bubble Tea UI: panels, chat list, messages, menus, profile details, themes, vim compose editor
+scripts/           screenshots.sh (README screenshots from demo data)
 ```
 
 ## Development
@@ -245,6 +274,7 @@ internal/ui/       Bubble Tea UI: panels, chat list, messages, message menu, vim
 make test       # go test ./...
 make build      # bin/watui
 make deploy     # ~/App/WaTui/watui + ~/.local/bin/watui symlink
+make screenshots  # regenerate docs/screenshots from demo data
 ```
 
 Two commands:

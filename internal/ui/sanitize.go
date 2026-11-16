@@ -28,3 +28,11 @@ func sanitize(s string) string {
 	}
 	return b.String()
 }
+
+// withNames shows "@<id>" mentions as "@<name>", like the phone does.
+func (m Model) withNames(s string) string {
+	if m.wa == nil {
+		return s
+	}
+	return m.wa.ResolveMentions(s)
+}

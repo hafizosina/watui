@@ -107,3 +107,30 @@ func labelsOf(items []menuItem) []string {
 	}
 	return out
 }
+
+func TestMentionsShowNames(t *testing.T) {
+	m := modelWithContacts(t)
+	ctx := context.Background()
+	client := m.wa
+	lid := types.NewJID("197426845585449", types.HiddenUserServer)
+	if err := client.WA.Store.LIDs.PutLIDMapping(ctx, lid, types.NewJID("6282222222222", types.DefaultUserServer)); err != nil {
+		t.Fatal(err)
+	}
+	stranger := types.NewJID("191869594144898", types.HiddenUserServer)
+	if err := client.Store.PutMessage(store.Message{ChatJID: "120363@g.us", ID: "x", SenderJID: stranger.String(), SenderName: "Fahmi"}); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]string{
+		"payload gini mas @197426845585449 ?": "payload gini mas @Sari Dewi ?", // LID → phone → contact
+		"cc @6281111111111":                   "cc @Budi Santoso",               // phone number
+		"kenapa @191869594144898 ?":           "kenapa @Fahmi ?",                // push name from their messages
+		"hi @6281200000000":                   "hi @You",
+		"unknown @99999999999 stays":          "unknown @99999999999 stays",
+		"email a@b.com, at 10:30":             "email a@b.com, at 10:30",
+	}
+	for in, want := range cases {
+		if got := client.ResolveMentions(in); got != want {
+			t.Errorf("ResolveMentions(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

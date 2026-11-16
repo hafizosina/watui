@@ -424,6 +424,21 @@ func (s *Store) Media(chatJID, id string) (string, []byte, error) {
 	return kind, data, err
 }
 
+// SenderName returns a push name seen on a message from any of the given JIDs.
+func (s *Store) SenderName(jids ...string) (string, error) {
+	for _, jid := range jids {
+		var name string
+		err := s.db.QueryRow(`SELECT sender_name FROM messages WHERE sender_jid = ? AND sender_name <> '' LIMIT 1`, jid).Scan(&name)
+		if err == nil {
+			return name, nil
+		}
+		if err != sql.ErrNoRows {
+			return "", err
+		}
+	}
+	return "", nil
+}
+
 func (s *Store) LastMessage(jid string) (Message, bool, error) {
 	m := Message{ChatJID: jid}
 	var ts int64

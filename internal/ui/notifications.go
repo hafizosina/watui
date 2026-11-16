@@ -81,7 +81,7 @@ func (m Model) noteFor(in IncomingMsg) (notify.Note, bool) {
 	}
 	body := "New message"
 	if m.cfg.Notify == config.NotifyOn {
-		body = ansi.Truncate(strings.TrimSpace(sanitize(in.Msg.Text)), 300, "…")
+		body = ansi.Truncate(strings.TrimSpace(sanitize(p.WA.ResolveMentions(in.Msg.Text))), 300, "…")
 		if body == "" {
 			body = "New message"
 		}
