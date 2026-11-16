@@ -20,15 +20,16 @@ const (
 var MutedForever = time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
 
 type Chat struct {
-	JID        string
-	Name       string
-	LastTS     time.Time
-	LastText   string
-	Unread     int
-	Pinned     bool
-	Archived   bool
-	MutedUntil time.Time
-	IsGroup    bool
+	JID         string
+	Name        string
+	LastTS      time.Time
+	LastText    string
+	Unread      int
+	UnreadForMe int // unread messages that @mention you or reply to you (groups)
+	Pinned      bool
+	Archived    bool
+	MutedUntil  time.Time
+	IsGroup     bool
 }
 
 func (c Chat) Muted() bool {
@@ -56,9 +57,14 @@ type Message struct {
 	Starred     bool
 	Reactions   map[string]string
 
-	// Set for live incoming messages only (not stored).
+	// MentionsMe / RepliesMe are set on incoming messages; stored together as for_me.
 	MentionsMe bool
 	RepliesMe  bool
+}
+
+// ForMe is a message the chat list highlights: an @mention of you, or a reply to you in a group.
+func (m Message) ForMe() bool {
+	return !m.FromMe && (m.MentionsMe || (m.RepliesMe && strings.HasSuffix(m.ChatJID, "@g.us")))
 }
 
 type Store struct {
@@ -111,6 +117,7 @@ func Open(db *sql.DB) (*Store, error) {
 		{"forwarded", "INTEGER NOT NULL DEFAULT 0"},
 		{"starred", "INTEGER NOT NULL DEFAULT 0"},
 		{"reactions", "TEXT NOT NULL DEFAULT ''"},
+		{"for_me", "INTEGER NOT NULL DEFAULT 0"},
 	} {
 		if err := s.addColumn("messages", col[0], col[1]); err != nil {
 			return nil, err
@@ -193,13 +200,14 @@ func (s *Store) PutMessage(m Message) error {
 	}
 	_, err := s.db.Exec(`
 		INSERT INTO messages (chat_jid, id, sender_jid, sender_name, from_me, ts, text, status, read, media_type, media,
-			quote_id, quote_sender, quote_text, forwarded)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			quote_id, quote_sender, quote_text, forwarded, for_me)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (chat_jid, id) DO UPDATE SET
 			quote_id = CASE WHEN excluded.quote_id <> '' THEN excluded.quote_id ELSE messages.quote_id END,
 			quote_sender = CASE WHEN excluded.quote_id <> '' THEN excluded.quote_sender ELSE messages.quote_sender END,
 			quote_text = CASE WHEN excluded.quote_id <> '' THEN excluded.quote_text ELSE messages.quote_text END,
 			forwarded = MAX(messages.forwarded, excluded.forwarded),
+			for_me = MAX(messages.for_me, excluded.for_me),
 			media_type = CASE WHEN excluded.media_type <> '' THEN excluded.media_type ELSE messages.media_type END,
 			media = COALESCE(excluded.media, messages.media),
 			sender_name = CASE WHEN excluded.sender_name <> '' THEN excluded.sender_name ELSE messages.sender_name END,
@@ -207,7 +215,7 @@ func (s *Store) PutMessage(m Message) error {
 			status = MAX(messages.status, excluded.status),
 			read = MAX(messages.read, excluded.read)`,
 		m.ChatJID, m.ID, m.SenderJID, m.SenderName, m.FromMe, m.TS.Unix(), m.Text, m.Status, m.Read, m.MediaType, m.Media,
-		m.QuoteID, m.QuoteSender, m.QuoteText, m.Forwarded)
+		m.QuoteID, m.QuoteSender, m.QuoteText, m.Forwarded, m.ForMe())
 	if err != nil {
 		return err
 	}
@@ -295,6 +303,7 @@ func (s *Store) Chats() ([]Chat, error) {
 	rows, err := s.db.Query(`
 		SELECT c.jid, c.name, c.last_ts, c.pinned, c.archived, c.muted_until, c.is_group,
 			MAX(c.sync_unread, (SELECT COUNT(*) FROM messages m WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.read = 0)),
+			(SELECT COUNT(*) FROM messages m WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.read = 0 AND m.for_me = 1),
 			COALESCE((SELECT m.text FROM messages m WHERE m.chat_jid = c.jid ORDER BY m.ts DESC LIMIT 1), '')
 		FROM chats c
 		WHERE c.last_ts > 0
@@ -307,7 +316,7 @@ func (s *Store) Chats() ([]Chat, error) {
 	for rows.Next() {
 		var c Chat
 		var lastTS, muted int64
-		if err := rows.Scan(&c.JID, &c.Name, &lastTS, &c.Pinned, &c.Archived, &muted, &c.IsGroup, &c.Unread, &c.LastText); err != nil {
+		if err := rows.Scan(&c.JID, &c.Name, &lastTS, &c.Pinned, &c.Archived, &muted, &c.IsGroup, &c.Unread, &c.UnreadForMe, &c.LastText); err != nil {
 			return nil, err
 		}
 		c.LastTS = time.Unix(lastTS, 0)
@@ -437,6 +446,18 @@ func (s *Store) SenderName(jids ...string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// MarkForMe flags unread incoming messages from before for_me was stored: text containing
+// one of the given "@<id>" mentions, or (in groups) a reply to quoteSender.
+func (s *Store) MarkForMe(mentions []string, quoteSender string) error {
+	for _, at := range mentions {
+		if _, err := s.db.Exec(`UPDATE messages SET for_me = 1 WHERE read = 0 AND from_me = 0 AND for_me = 0 AND instr(text, ?) > 0`, at); err != nil {
+			return err
+		}
+	}
+	_, err := s.db.Exec(`UPDATE messages SET for_me = 1 WHERE read = 0 AND from_me = 0 AND for_me = 0 AND quote_sender = ? AND chat_jid LIKE '%@g.us'`, quoteSender)
+	return err
 }
 
 func (s *Store) LastMessage(jid string) (Message, bool, error) {

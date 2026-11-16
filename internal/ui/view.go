@@ -286,6 +286,10 @@ func (m Model) chatRow(c store.Chat, selected bool, w int) string {
 		} else {
 			badge = styleBadge.Render(n)
 		}
+		if c.UnreadForMe > 0 {
+			// someone @mentioned you or replied to you: stands out even in a muted chat
+			badge = styleBadgeForMe.Render(" @ ") + paint(lipgloss.NewStyle(), " ") + badge
+		}
 	}
 	preview := strings.ReplaceAll(sanitize(m.withNames(c.LastText)), "\n", " ")
 	preview = ansi.Truncate(preview, max(1, w-3-lipgloss.Width(badge)), "…")

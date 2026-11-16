@@ -86,3 +86,21 @@ func (c *Client) lookupMention(ctx context.Context, id string) string {
 	}
 	return ""
 }
+
+// backfillForMe flags unread mentions/replies stored before watui kept track of them,
+// so the chat list highlights them too.
+func (c *Client) backfillForMe() {
+	own := c.ownJID()
+	if own.IsEmpty() {
+		return
+	}
+	at := []string{"@" + own.User}
+	if lid := c.WA.Store.GetLID(); !lid.IsEmpty() {
+		at = append(at, "@"+lid.User)
+	}
+	if err := c.Store.MarkForMe(at, own.String()); err != nil {
+		c.log.Warnf("mark mentions: %v", err)
+		return
+	}
+	c.notify()
+}

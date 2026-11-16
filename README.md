@@ -116,6 +116,8 @@ In group info: `j`/`k` move through members, `Enter` opens a chat with them, `Sp
 
 WhatsApp sends an @mention as a hidden ID (`@197426845585449`). watui shows the name instead, like the phone: your contact name, else their WhatsApp name, else their number; `@You` for you. An ID it can't match yet (contacts still syncing) stays as-is and is tried again a minute later.
 
+A chat where someone @mentions you or replies to you (in a group) gets a magenta **@** badge next to its unread count in the chat list, even when the chat is muted. It goes away once you read the chat.
+
 ### Emoji and stickers
 
 - **Emoji:** in INSERT, type `:` and a few letters (`:joy`, `:thumbsup`, `:pray`) — a popup suggests emoji (popular ones first). `Tab` inserts, `Ctrl+n`/`Ctrl+p` move, `Esc` hides it. Times like `10:30` don't trigger it.

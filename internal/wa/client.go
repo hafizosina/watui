@@ -46,6 +46,8 @@ type Client struct {
 	lastSync time.Time
 	groups   map[types.JID]bool
 	mentions map[string]mentionName
+
+	backfillOnce sync.Once
 }
 
 func New(wa *whatsmeow.Client, st *store.Store, log waLog.Logger) *Client {
@@ -104,6 +106,7 @@ func (c *Client) handle(evt any) {
 	case *events.Connected:
 		c.setState(StateConnected)
 		go c.loadGroupNames(ctx)
+		c.backfillOnce.Do(func() { go c.backfillForMe() })
 	case *events.Disconnected:
 		c.setState(StateDisconnected)
 	case *events.StreamReplaced:
@@ -273,10 +276,12 @@ func (c *Client) onMessage(ctx context.Context, e *events.Message, history bool)
 		QuoteText:   quoteText,
 		Forwarded:   ci.GetIsForwarded(),
 	}
-	c.check(c.Store.PutMessage(msg))
-	if !history && !e.Info.IsFromMe {
+	if !e.Info.IsFromMe {
 		msg.MentionsMe = c.mentionsMe(ctx, ci.GetMentionedJID())
 		msg.RepliesMe = quoteSender != "" && quoteSender == c.ownJID().String()
+	}
+	c.check(c.Store.PutMessage(msg))
+	if !history && !e.Info.IsFromMe {
 		c.mu.Lock()
 		fn := c.incoming
 		c.mu.Unlock()
