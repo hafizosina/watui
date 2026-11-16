@@ -37,7 +37,7 @@ func (m Model) View() string {
 	chatW := m.width - listW
 	mainH := m.mainH()
 	chatsH := mainH - m.profilesH()
-	msgsH := mainH - m.composeH()
+	msgsH := mainH - m.composeH() - headerH
 
 	left := lipgloss.JoinVertical(lipgloss.Left,
 		panel(m.profilesTitle(), m.profilesFooter(), m.profilesView(listW-2), listW, m.profilesH(), m.mode == modeNormal && m.focus == focusProfiles),
@@ -50,6 +50,7 @@ func (m Model) View() string {
 		right = panel(m.infoTitle(), m.infoFooter(), m.infoView(chatW-2, mainH-2), chatW, mainH, m.mode == modeNormal && m.focus == focusChat)
 	} else {
 		right = lipgloss.JoinVertical(lipgloss.Left,
+			panel("", "", m.headerView(chatW-2), chatW, headerH, false),
 			panel(m.messagesTitle(), m.messagesFooter(), m.messagesView(chatW-2, msgsH-2), chatW, msgsH, m.mode != modeInsert && m.focus == focusChat),
 			panel(m.composeTitle(), m.composeFooter(), m.input.View(), chatW, m.composeH(), m.mode == modeInsert),
 		)
@@ -58,6 +59,9 @@ func (m Model) View() string {
 	if m.mode == modeInsert && m.info == nil && !m.showHelp {
 		if _, query, list := m.emojiSuggestions(); len(list) > 0 {
 			box, bw, bh := m.emojiView(query, list)
+			body = overlay(body, box, min(listW+2, max(0, m.width-bw)), max(0, mainH-m.composeH()-bh))
+		} else if _, query, list, active := m.mentionSuggestions(); active {
+			box, bw, bh := m.mentionView(query, list)
 			body = overlay(body, box, min(listW+2, max(0, m.width-bw)), max(0, mainH-m.composeH()-bh))
 		}
 	}
@@ -141,18 +145,7 @@ func (m Model) messagesTitle() string {
 	if m.openJID == "" {
 		return "[3] Messages"
 	}
-	chat, _ := m.openChat()
-	title := "[3] " + m.names[m.openJID]
-	if chat.IsGroup {
-		title += " · group"
-	}
-	if chat.Archived {
-		title += " · archived"
-	}
-	if chat.Muted() {
-		title += " " + styleMuted.Render(iconMute+" muted")
-	}
-	return title
+	return "[3] Messages" // who it is shows in the header above
 }
 
 func (m Model) messagesFooter() string {
@@ -292,6 +285,13 @@ func (m Model) chatRow(c store.Chat, selected bool, w int) string {
 		}
 	}
 	preview := strings.ReplaceAll(sanitize(m.withNames(c.LastText)), "\n", " ")
+	if c.LastDeleted {
+		if m.cfg.ShowDeleted && preview != "" {
+			preview = "⊘ " + preview
+		} else {
+			preview = "⊘ message deleted"
+		}
+	}
 	preview = ansi.Truncate(preview, max(1, w-3-lipgloss.Width(badge)), "…")
 	gap2 := max(0, w-2-lipgloss.Width(preview)-lipgloss.Width(badge))
 	line2 := paint(lipgloss.NewStyle(), " ") + paint(styleDim, preview) +
@@ -388,10 +388,10 @@ func (m *Model) renderMessages(forceBottom bool) {
 				}
 				content = append(content, nameStyle.Render(nameOf(msg))+" "+styleDim.Render(msg.TS.Local().Format("15:04")))
 			}
-			if msg.Forwarded && !msg.Deleted {
+			if msg.Forwarded && !m.gone(msg) {
 				content = append(content, styleDim.Italic(true).Render("↪ forwarded"))
 			}
-			if msg.QuoteID != "" && !msg.Deleted {
+			if msg.QuoteID != "" && !m.gone(msg) {
 				qbar := lipgloss.NewStyle().Foreground(senderColor(msg.QuoteSender)).Render("┃ ")
 				who := lipgloss.NewStyle().Foreground(senderColor(msg.QuoteSender)).Bold(true).Render(nameOfJID(msg.QuoteSender, ""))
 				quoted := ansi.Truncate(strings.ReplaceAll(sanitize(m.withNames(msg.QuoteText)), "\n", " "), max(10, bodyW-8), "…")
@@ -534,7 +534,7 @@ func (m Model) imageSet(w int) map[string]media.Quality {
 	auto := 0
 	for i := len(m.messages) - 1; i >= 0; i-- {
 		msg := m.messages[i]
-		if msg.MediaType == "" || msg.Deleted || m.forceHide[msg.ID] {
+		if msg.MediaType == "" || m.gone(msg) || m.forceHide[msg.ID] {
 			continue
 		}
 		if msg.MediaType == wa.MediaAudio {
@@ -560,9 +560,18 @@ func (m Model) imageSet(w int) map[string]media.Quality {
 
 func (m Model) renderBody(msg store.Message, w int, showImage bool, q media.Quality) string {
 	if msg.Deleted {
-		return "   " + styleDeleted.Render("message deleted")
+		if m.gone(msg) {
+			return "   " + styleDeleted.Render("message deleted")
+		}
+		who := "deleted by sender"
+		if msg.FromMe {
+			who = "you deleted this for everyone"
+		}
+		msg.Deleted = false
+		return "   " + styleDeleted.Render("⊘ "+who) + "\n" + m.renderBody(msg, w, showImage, q)
 	}
-	msg.Text = m.withNames(msg.Text)
+	var marks []string
+	msg.Text, marks = m.withMentionLabels(msg.Text)
 	text := sanitize(msg.Text)
 	if msg.MediaType == wa.MediaAudio {
 		return m.audioLine(msg, text) + m.suffix(msg)
@@ -586,7 +595,7 @@ func (m Model) renderBody(msg store.Message, w int, showImage bool, q media.Qual
 			text = sanitize(msg.Text) + " " + styleDim.Render("("+status+")")
 		}
 	}
-	body := m.renderText(msg, text, w)
+	body := m.renderText(msg, text, w, marks...)
 	if len(picture) == 0 {
 		return body
 	}
@@ -673,11 +682,21 @@ func (m Model) suffix(msg store.Message) string {
 	return suffix
 }
 
-func (m Model) renderText(msg store.Message, text string, w int) string {
+// renderText wraps text; marks are "@Name" mentions to highlight.
+func (m Model) renderText(msg store.Message, text string, w int, marks ...string) string {
 	if text == "" {
 		return ""
 	}
 	body := styleText.Width(max(10, w-4)).Render(text)
+	if len(marks) > 0 && !strings.Contains(text, "\x1b") {
+		wrapped := strings.Split(lipgloss.NewStyle().Width(max(10, w-4)).Render(text), "\n")
+		for i, l := range wrapped {
+			// the wrap pads lines with spaces; trim them like the plain path does, or your own
+			// (right-aligned) messages get pushed left and overflow the pane
+			wrapped[i] = highlightMentions(strings.TrimRight(l, " "), marks)
+		}
+		body = strings.Join(wrapped, "\n")
+	}
 	suffix := m.suffix(msg)
 	lines := strings.Split(strings.TrimRight(body, " \n"), "\n")
 	for i := range lines {
@@ -799,7 +818,7 @@ func helpView(w int) string {
 		{"options", "view profile i · expand/collapse z · replied message g · replies G"},
 		{" ", "reply r · edit e · react + · show/hide image v · view in nvim v"},
 		{" ", "play/pause o · speed . · stop x · open file/image o · save S"},
-		{" ", "copy y · forward f · star s · pin p · delete d"},
+		{" ", "copy y · forward f · star s · pin p · delete d · message info I"},
 		{"", ""},
 		{"", "Global"},
 		{"1 / 2 / 3 / 4", "focus profiles / chats / messages / compose"},
@@ -823,6 +842,8 @@ func helpView(w int) string {
 		{"yy Y yiw p P", "yank / paste"},
 		{"u ctrl+r J ~ r", "undo / redo / join / case / replace"},
 		{"v V", "visual / visual line (d y c ~ o)"},
+		{"@name", "mention a group member (tab/enter picks)"},
+		{":name", "emoji (tab inserts)"},
 		{"ctrl+e", "edit in $EDITOR"},
 		{"", ""},
 		{"", "Commands"},

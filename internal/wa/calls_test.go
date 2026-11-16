@@ -9,10 +9,12 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"go.mau.fi/whatsmeow"
 	waBinary "go.mau.fi/whatsmeow/binary"
+	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/zhenzhu/watui/internal/store"
 )
@@ -90,5 +92,55 @@ func TestMentionsMe(t *testing.T) {
 	}
 	if c.mentionsMe(context.Background(), []string{"6289999@s.whatsapp.net"}) {
 		t.Error("someone else's mention must not count")
+	}
+}
+
+func TestOwnDevicesDontMarkDelivered(t *testing.T) {
+	c := testClient(t)
+	ctx := context.Background()
+	chat := types.NewJID("6285715981164", types.DefaultUserServer)
+	me := types.NewJID("6281200000000", types.DefaultUserServer)
+	put := func(id string) {
+		t.Helper()
+		if err := c.Store.PutMessage(store.Message{ChatJID: chat.String(), ID: id, FromMe: true, TS: time.Now(), Text: "masih mati bu cctvny", Status: store.StatusSent, Read: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	status := func(id string) store.Status {
+		t.Helper()
+		msgs, err := c.Store.Messages(chat.String(), 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range msgs {
+			if m.ID == id {
+				return m.Status
+			}
+		}
+		t.Fatalf("message %s not stored", id)
+		return 0
+	}
+	put("A")
+	// your phone got the copy: still one tick
+	c.onReceipt(ctx, &events.Receipt{MessageSource: types.MessageSource{Chat: chat, Sender: me, IsFromMe: true}, MessageIDs: []types.MessageID{"A"}, Type: types.ReceiptTypeDelivered, Timestamp: time.Now()})
+	if got := status("A"); got != store.StatusSent {
+		t.Fatalf("after own-device receipt: status %v, want sent", got)
+	}
+	// the recipient's phone got it: two ticks, and Message info knows when
+	c.onReceipt(ctx, &events.Receipt{MessageSource: types.MessageSource{Chat: chat, Sender: chat}, MessageIDs: []types.MessageID{"A"}, Type: types.ReceiptTypeDelivered, Timestamp: time.Now()})
+	if got := status("A"); got != store.StatusDelivered {
+		t.Fatalf("after recipient receipt: status %v, want delivered", got)
+	}
+	if rs, _ := c.Store.Receipts(chat.String(), "A"); len(rs) != 1 || rs[0].User != chat.String() {
+		t.Errorf("receipts = %+v", rs)
+	}
+
+	// a message you sent from your phone arrives as a copy: one tick
+	c.onMessage(ctx, &events.Message{
+		Info:    types.MessageInfo{MessageSource: types.MessageSource{Chat: chat, Sender: me, IsFromMe: true}, ID: "B", Timestamp: time.Now()},
+		Message: &waE2E.Message{Conversation: proto.String("Okay bu, terimaksih bu")},
+	}, false)
+	if got := status("B"); got != store.StatusSent {
+		t.Errorf("message sent from phone: status %v, want sent", got)
 	}
 }

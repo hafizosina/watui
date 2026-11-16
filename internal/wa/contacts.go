@@ -138,3 +138,13 @@ func (c *Client) CreateGroup(ctx context.Context, name string, members []string)
 	jid := info.JID.String()
 	return jid, c.StartChat(jid, name)
 }
+
+// InContacts reports whether jid is saved in your phone's address book.
+func (c *Client) InContacts(jid string) bool {
+	parsed, err := types.ParseJID(jid)
+	if err != nil {
+		return false
+	}
+	info, ok := c.contact(context.Background(), parsed)
+	return ok && (info.FullName != "" || info.FirstName != "")
+}

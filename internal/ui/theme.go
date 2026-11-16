@@ -60,7 +60,7 @@ var (
 
 	styleBorder, styleBorderOn, styleTitle, styleDim, styleText, styleName lipgloss.Style
 	styleUnreadName, styleBadge, styleBadgeMuted, styleSelected, styleMe   lipgloss.Style
-	styleBadgeForMe                                                        lipgloss.Style
+	styleBadgeForMe, styleMention, styleMentionMe                          lipgloss.Style
 	styleDay, styleDeleted, styleRead, styleFailed, styleError, styleInfo  lipgloss.Style
 	styleStatusBar, styleKey, styleMuted                                   lipgloss.Style
 )
@@ -173,6 +173,8 @@ func ApplyTheme(t Theme) {
 	styleBadge = lipgloss.NewStyle().Foreground(colOnAccent).Background(colGreen).Bold(true)
 	styleBadgeMuted = lipgloss.NewStyle().Foreground(colOnAccent).Background(colComment).Bold(true)
 	styleBadgeForMe = lipgloss.NewStyle().Foreground(colOnAccent).Background(colMagenta).Bold(true)
+	styleMention = lipgloss.NewStyle().Foreground(colBlue).Bold(true)
+	styleMentionMe = lipgloss.NewStyle().Foreground(colMagenta).Bold(true) // same color as the @ badge
 	styleSelected = lipgloss.NewStyle().Background(colHighlight)
 	styleMe = lipgloss.NewStyle().Foreground(colBlue).Bold(true)
 	styleDay = lipgloss.NewStyle().Foreground(colComment)

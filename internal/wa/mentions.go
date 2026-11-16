@@ -3,6 +3,8 @@ package wa
 import (
 	"context"
 	"regexp"
+	"sort"
+	"strings"
 	"time"
 
 	"go.mau.fi/whatsmeow/types"
@@ -22,15 +24,24 @@ type mentionName struct {
 
 // ResolveMentions replaces "@<id>" in text with "@<name>" where the id is known.
 func (c *Client) ResolveMentions(text string) string {
+	text, _ = c.ResolveMentionLabels(text)
+	return text
+}
+
+// ResolveMentionLabels is ResolveMentions, also returning the "@<name>" labels it put in.
+func (c *Client) ResolveMentionLabels(text string) (string, []string) {
 	if !mentionRe.MatchString(text) {
-		return text
+		return text, nil
 	}
-	return mentionRe.ReplaceAllStringFunc(text, func(s string) string {
+	var labels []string
+	text = mentionRe.ReplaceAllStringFunc(text, func(s string) string {
 		if name := c.mentionName(s[1:]); name != "" {
+			labels = append(labels, "@"+name)
 			return "@" + name
 		}
 		return s
 	})
+	return text, labels
 }
 
 func (c *Client) mentionName(id string) string {
@@ -103,4 +114,60 @@ func (c *Client) backfillForMe() {
 		return
 	}
 	c.notify()
+}
+
+// Mentionable is a group member you can @mention.
+type Mentionable struct {
+	JID   string // as the group addresses them (LID or phone JID); goes in MentionedJID
+	User  string // JID user part; the message text carries "@" + User
+	Name  string
+	Phone string // "+62…" when known
+}
+
+// GroupMembers lists the people you can mention in a group (not you), sorted by name.
+// It asks the server for the member list, and teaches ResolveMentions their names.
+func (c *Client) GroupMembers(ctx context.Context, chatJID string) ([]Mentionable, error) {
+	jid, err := types.ParseJID(chatJID)
+	if err != nil {
+		return nil, err
+	}
+	info, err := c.WA.GetGroupInfo(ctx, jid)
+	if err != nil {
+		return nil, err
+	}
+	own, ownLID := c.ownJID(), c.WA.Store.GetLID().ToNonAD()
+	var out []Mentionable
+	for _, p := range info.Participants {
+		id := p.JID.ToNonAD()
+		pn := p.PhoneNumber.ToNonAD()
+		if pn.IsEmpty() {
+			pn = c.normalize(ctx, id)
+		}
+		if id == own || id == ownLID || pn == own {
+			continue
+		}
+		m := Mentionable{JID: id.String(), User: id.User}
+		if pn.Server == types.DefaultUserServer {
+			m.Phone = "+" + pn.User
+		}
+		m.Name = c.contactName(ctx, pn, p.DisplayName)
+		if strings.HasPrefix(m.Name, "+") || m.Name == pn.User || m.Name == id.User {
+			if n, _ := c.Store.SenderName(pn.String(), id.String()); n != "" {
+				m.Name = n
+			}
+		}
+		out = append(out, m)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	c.mu.Lock()
+	if c.mentions == nil {
+		c.mentions = map[string]mentionName{}
+	}
+	for _, m := range out {
+		if !strings.HasPrefix(m.Name, "+") {
+			c.mentions[m.User] = mentionName{name: m.Name, at: time.Now()}
+		}
+	}
+	c.mu.Unlock()
+	return out, nil
 }

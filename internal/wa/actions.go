@@ -97,13 +97,14 @@ func (c *Client) sendAndStore(ctx context.Context, chatJID string, content *waE2
 	return err
 }
 
-func (c *Client) Reply(ctx context.Context, chatJID, text string, to store.Message) error {
+func (c *Client) Reply(ctx context.Context, chatJID, text string, to store.Message, mentions []string) error {
 	content := &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{
 		Text: proto.String(text),
 		ContextInfo: &waE2E.ContextInfo{
 			StanzaID:      proto.String(to.ID),
 			Participant:   proto.String(to.SenderJID),
 			QuotedMessage: &waE2E.Message{Conversation: proto.String(to.Text)},
+			MentionedJID:  mentions,
 		},
 	}}
 	return c.sendAndStore(ctx, chatJID, content, store.Message{

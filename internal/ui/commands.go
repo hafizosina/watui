@@ -41,6 +41,7 @@ var settingValues = map[string][]string{
 	"notify":         {"on", "private", "off"},
 	"notify_sound":   {"watui", "system", "off"},
 	"collapse_lines": {"0", "15", "30"},
+	"show_deleted":   {"on", "off"},
 	"image_width":    {"30", "40", "60"},
 	"image_height":   {"10", "15", "20"},
 	"theme":          nil,

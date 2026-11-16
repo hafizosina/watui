@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	_ "github.com/mattn/go-sqlite3"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -580,4 +581,59 @@ func TestLoadOlderMessages(t *testing.T) {
 	m.vp.SetYOffset(0)
 	m.renderMessages(false)
 	checkFrame(t, m.View(), 110, 34)
+}
+
+func TestDeletedMessagesKeepContent(t *testing.T) {
+	const w, h = 110, 30
+	m := step(testModel(t), tea.WindowSizeMsg{Width: w, Height: h}, ChangedMsg{})
+	m = step(m, key("enter")) // BE Squad (pinned, first); Andi's "LGTM" was deleted for everyone
+	if !strings.HasSuffix(m.openJID, "@g.us") {
+		t.Fatalf("opened %q", m.openJID)
+	}
+	view := ansi.Strip(m.View())
+	if !strings.Contains(view, "⊘ deleted by sender") || !strings.Contains(view, "LGTM") {
+		t.Errorf("deleted message should keep its text:\n%s", view)
+	}
+	// the store keeps it either way
+	msgs, err := m.wa.Store.Messages(m.openJID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, msg := range msgs {
+		if msg.ID == "5" && (!msg.Deleted || msg.Text != "LGTM") {
+			t.Errorf("stored: deleted=%t text=%q", msg.Deleted, msg.Text)
+		}
+	}
+	m = step(m, key(":"))
+	for _, r := range "set show_deleted=off" {
+		m = step(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	m = step(m, key("enter"))
+	if m.cfg.ShowDeleted {
+		t.Fatal(":set show_deleted=off didn't apply")
+	}
+	view = ansi.Strip(m.View())
+	if strings.Contains(view, "LGTM") || !strings.Contains(view, "message deleted") {
+		t.Errorf("show_deleted=off should hide the text:\n%s", view)
+	}
+}
+
+func TestHeaderShowsWhoTheChatIsWith(t *testing.T) {
+	const w, h = 110, 24
+	m := step(testModel(t), tea.WindowSizeMsg{Width: w, Height: h}, ChangedMsg{})
+	group := "1203630@g.us"
+	m.members[group] = []wa.Mentionable{{JID: "1@lid", User: "1", Name: "Sari"}, {JID: "2@lid", User: "2", Name: "Andi"}}
+	m.membersAt[group] = time.Now()
+	m = step(m, key("enter"))
+	view := ansi.Strip(m.View())
+	checkFrame(t, m.View(), w, h)
+	head := strings.Join(strings.Split(view, "\n")[:4], "\n")
+	if !strings.Contains(head, "BE Squad") || !strings.Contains(head, "3 members · You, Sari, Andi") {
+		t.Errorf("group header:\n%s", head)
+	}
+	m = step(m, key("esc"), key("j"), key("enter"))
+	head = strings.Join(strings.Split(ansi.Strip(m.View()), "\n")[:4], "\n")
+	if !strings.Contains(head, "+628111") || !strings.Contains(head, "not in your contacts") || strings.Count(head, "+628111") != 1 {
+		t.Errorf("DM header:\n%s", head)
+	}
 }

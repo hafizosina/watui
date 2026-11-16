@@ -3,6 +3,8 @@ package ui
 import (
 	"strings"
 	"unicode"
+
+	"github.com/zhenzhu/watui/internal/store"
 )
 
 func sanitize(s string) string {
@@ -35,4 +37,28 @@ func (m Model) withNames(s string) string {
 		return s
 	}
 	return m.wa.ResolveMentions(s)
+}
+
+// withMentionLabels is withNames, also returning the "@Name" labels to highlight.
+func (m Model) withMentionLabels(s string) (string, []string) {
+	if m.wa == nil {
+		return s, nil
+	}
+	text, labels := m.wa.ResolveMentionLabels(s)
+	for i := range labels {
+		labels[i] = sanitize(labels[i])
+	}
+	return text, labels
+}
+
+// gone: a deleted message shown only as "message deleted" (show_deleted off, or nothing was kept).
+func (m Model) gone(msg store.Message) bool {
+	return msg.Deleted && (!m.cfg.ShowDeleted || msg.Text == "" && msg.MediaType == "")
+}
+
+func onOff(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
 }

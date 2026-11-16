@@ -24,6 +24,7 @@ type Chat struct {
 	Name        string
 	LastTS      time.Time
 	LastText    string
+	LastDeleted bool
 	Unread      int
 	UnreadForMe int // unread messages that @mention you or reply to you (groups)
 	Pinned      bool
@@ -54,6 +55,7 @@ type Message struct {
 	QuoteSender string
 	QuoteText   string
 	Forwarded   bool
+	ReceivedAt  time.Time // set for live incoming messages
 	Starred     bool
 	Reactions   map[string]string
 
@@ -102,7 +104,7 @@ CREATE INDEX IF NOT EXISTS messages_unread ON messages (chat_jid) WHERE read = 0
 `
 
 func Open(db *sql.DB) (*Store, error) {
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.Exec(schema + receiptsSchema); err != nil {
 		return nil, err
 	}
 	s := &Store{db: db}
@@ -118,6 +120,8 @@ func Open(db *sql.DB) (*Store, error) {
 		{"starred", "INTEGER NOT NULL DEFAULT 0"},
 		{"reactions", "TEXT NOT NULL DEFAULT ''"},
 		{"for_me", "INTEGER NOT NULL DEFAULT 0"},
+		{"received_at", "INTEGER NOT NULL DEFAULT 0"}, // live incoming: when it reached this computer
+		{"read_at", "INTEGER NOT NULL DEFAULT 0"},     // incoming: when you read it
 	} {
 		if err := s.addColumn("messages", col[0], col[1]); err != nil {
 			return nil, err
@@ -200,14 +204,15 @@ func (s *Store) PutMessage(m Message) error {
 	}
 	_, err := s.db.Exec(`
 		INSERT INTO messages (chat_jid, id, sender_jid, sender_name, from_me, ts, text, status, read, media_type, media,
-			quote_id, quote_sender, quote_text, forwarded, for_me)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			quote_id, quote_sender, quote_text, forwarded, for_me, received_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (chat_jid, id) DO UPDATE SET
 			quote_id = CASE WHEN excluded.quote_id <> '' THEN excluded.quote_id ELSE messages.quote_id END,
 			quote_sender = CASE WHEN excluded.quote_id <> '' THEN excluded.quote_sender ELSE messages.quote_sender END,
 			quote_text = CASE WHEN excluded.quote_id <> '' THEN excluded.quote_text ELSE messages.quote_text END,
 			forwarded = MAX(messages.forwarded, excluded.forwarded),
 			for_me = MAX(messages.for_me, excluded.for_me),
+			received_at = CASE WHEN messages.received_at > 0 THEN messages.received_at ELSE excluded.received_at END,
 			media_type = CASE WHEN excluded.media_type <> '' THEN excluded.media_type ELSE messages.media_type END,
 			media = COALESCE(excluded.media, messages.media),
 			sender_name = CASE WHEN excluded.sender_name <> '' THEN excluded.sender_name ELSE messages.sender_name END,
@@ -215,7 +220,7 @@ func (s *Store) PutMessage(m Message) error {
 			status = MAX(messages.status, excluded.status),
 			read = MAX(messages.read, excluded.read)`,
 		m.ChatJID, m.ID, m.SenderJID, m.SenderName, m.FromMe, m.TS.Unix(), m.Text, m.Status, m.Read, m.MediaType, m.Media,
-		m.QuoteID, m.QuoteSender, m.QuoteText, m.Forwarded, m.ForMe())
+		m.QuoteID, m.QuoteSender, m.QuoteText, m.Forwarded, m.ForMe(), unixOrZero(m.ReceivedAt))
 	if err != nil {
 		return err
 	}
@@ -228,7 +233,8 @@ func (s *Store) EditMessage(chatJID, id, text string) error {
 }
 
 func (s *Store) DeleteMessage(chatJID, id string) error {
-	_, err := s.db.Exec(`UPDATE messages SET text = '', deleted = 1 WHERE chat_jid = ? AND id = ?`, chatJID, id)
+	// keep text and media: the UI can still show what it said (show_deleted)
+	_, err := s.db.Exec(`UPDATE messages SET deleted = 1 WHERE chat_jid = ? AND id = ?`, chatJID, id)
 	return err
 }
 
@@ -248,16 +254,18 @@ func (s *Store) SetStatusByIDs(ids []string, status Status) error {
 }
 
 func (s *Store) MarkChatRead(jid string) error {
-	if _, err := s.db.Exec(`UPDATE messages SET read = 1 WHERE chat_jid = ? AND read = 0`, jid); err != nil {
+	if _, err := s.db.Exec(`UPDATE messages SET read = 1, read_at = ? WHERE chat_jid = ? AND read = 0`, time.Now().Unix(), jid); err != nil {
 		return err
 	}
 	_, err := s.db.Exec(`UPDATE chats SET sync_unread = 0 WHERE jid = ?`, jid)
 	return err
 }
 
-func (s *Store) MarkReadByIDs(chatJID string, ids []string) error {
+// MarkReadByIDs marks messages read at the given time (you read them on another device).
+func (s *Store) MarkReadByIDs(chatJID string, ids []string, at time.Time) error {
 	for _, id := range ids {
-		if _, err := s.db.Exec(`UPDATE messages SET read = 1 WHERE chat_jid = ? AND id = ?`, chatJID, id); err != nil {
+		if _, err := s.db.Exec(`UPDATE messages SET read_at = CASE WHEN read = 0 OR read_at = 0 THEN ? ELSE read_at END, read = 1
+			WHERE chat_jid = ? AND id = ? AND from_me = 0`, at.Unix(), chatJID, id); err != nil {
 			return err
 		}
 	}
@@ -304,7 +312,7 @@ func (s *Store) Chats() ([]Chat, error) {
 		SELECT c.jid, c.name, c.last_ts, c.pinned, c.archived, c.muted_until, c.is_group,
 			MAX(c.sync_unread, (SELECT COUNT(*) FROM messages m WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.read = 0)),
 			(SELECT COUNT(*) FROM messages m WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.read = 0 AND m.for_me = 1),
-			COALESCE((SELECT m.text FROM messages m WHERE m.chat_jid = c.jid ORDER BY m.ts DESC LIMIT 1), '')
+			COALESCE((SELECT m.deleted || '|' || m.text FROM messages m WHERE m.chat_jid = c.jid ORDER BY m.ts DESC LIMIT 1), '')
 		FROM chats c
 		WHERE c.last_ts > 0
 		ORDER BY c.pinned DESC, c.last_ts DESC`)
@@ -318,6 +326,9 @@ func (s *Store) Chats() ([]Chat, error) {
 		var lastTS, muted int64
 		if err := rows.Scan(&c.JID, &c.Name, &lastTS, &c.Pinned, &c.Archived, &muted, &c.IsGroup, &c.Unread, &c.UnreadForMe, &c.LastText); err != nil {
 			return nil, err
+		}
+		if flag, text, ok := strings.Cut(c.LastText, "|"); ok {
+			c.LastDeleted, c.LastText = flag == "1", text
 		}
 		c.LastTS = time.Unix(lastTS, 0)
 		c.MutedUntil = time.Unix(muted, 0)

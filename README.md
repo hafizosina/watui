@@ -64,6 +64,8 @@ From the shell: `watui add work`, `watui profiles`, `watui logout work`. Your fi
 
 The screen has two panes: **chat list** (left) and **messages** (right). `Tab` switches between them. Press `?` inside the app for the full list.
 
+A header above the messages shows who the open chat is with: avatar, name, pin/mute, and below it their number (and "not in your contacts") or, for a group, how many members and who.
+
 | Mode | Key | Action |
 |---|---|---|
 | NORMAL (list) | `j` / `k` | move down / up |
@@ -114,9 +116,15 @@ In group info: `j`/`k` move through members, `Enter` opens a chat with them, `Sp
 
 ### Mentions
 
-WhatsApp sends an @mention as a hidden ID (`@197426845585449`). watui shows the name instead, like the phone: your contact name, else their WhatsApp name, else their number; `@You` for you. An ID it can't match yet (contacts still syncing) stays as-is and is tried again a minute later.
+WhatsApp sends an @mention as a hidden ID (`@197426845585449`). watui shows the name instead, highlighted (blue; `@You` in magenta), like the phone: your contact name, else their WhatsApp name, else their number; `@You` for you. An ID it can't match yet (contacts still syncing) stays as-is and is tried again a minute later.
+
+**Mention someone:** in a group, type `@` in INSERT and a few letters of their name (or number). A popup lists the members; `Ctrl+n`/`Ctrl+p` move, `Tab` or `Enter` picks, `Esc` hides it. Compose shows `@Name` in blue as one unit: the cursor jumps over it, and `Backspace`, `x` or `dw` remove the whole mention (no half-edited names). It is sent as a real mention, so they get notified like from the phone. The member list is fetched the first time you type `@` in a chat.
 
 A chat where someone @mentions you or replies to you (in a group) gets a magenta **@** badge next to its unread count in the chat list, even when the chat is muted. It goes away once you read the chat.
+
+### Deleted messages
+
+When someone deletes a message for everyone, watui keeps it: the text (and the picture, video, voice note or file) stays in the chat under a red **⊘ deleted by sender** line, and the chat list preview starts with ⊘. Copy, Save, Open and Play still work on it; Reply, React, Forward and Star don't. `show_deleted = off` (or `:set show_deleted=off`) shows just "message deleted" again — the content is still kept. Text deleted before this feature existed was wiped and can't be brought back; older deleted pictures, videos and files lost only their caption, so they show again.
 
 ### Emoji and stickers
 
@@ -158,6 +166,7 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 | Star / Unstar | `s` | ★ shows next to the message |
 | Pin | `p` | 24 hours, 7 days or 30 days, or unpin |
 | Delete for everyone | `d` | your own messages, first 2 days; asks first |
+| Message info | `I` | your message: when sent, delivered and read (group: who read it and when, who only got it, how many are still waiting; `▶ played` for voice notes). Someone else's: when they sent it, when it reached this computer, when you read it. Updates live; `j`/`k` scroll, `Esc` back |
 
 While typing after `:`, a popup suggests commands (with a short description) and their arguments — theme names, profile names, `:set` keys and values. `Tab`/`Ctrl+n` completes and cycles, `Shift+Tab`/`Ctrl+p` goes back, `Enter` runs.
 
@@ -185,6 +194,7 @@ theme = tokyonight     # see Themes below
 image_width = 40       # biggest picture size, in terminal cells
 image_height = 15
 collapse_lines = 15    # long messages fold after this many lines (0 = never)
+show_deleted = on      # on: keep showing messages deleted for everyone | off: "message deleted"
 notify = on            # on | private (sender only) | off
 notify_sound = watui   # watui (own chime; calls ring) | system | off | /path/to/sound.ogg
 ```

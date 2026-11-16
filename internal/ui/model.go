@@ -117,8 +117,15 @@ type Model struct {
 	cmdTyped     string
 	stickers     *stickerPicker
 	emojiHidden  string
-	expanded     map[string]bool
-	foldable     map[string]bool
+
+	members        map[string][]wa.Mentionable // group JID → members, for @mentions
+	membersLoading map[string]bool
+	membersFailed  map[string]time.Time
+	membersAt      map[string]time.Time
+	mentionSel     int
+	mentionHidden  string
+	expanded       map[string]bool
+	foldable       map[string]bool
 
 	vp         viewport.Model
 	input      *editor
@@ -148,22 +155,26 @@ func newModel(client *wa.Client, cfg config.Config, images *media.Manager, pl *p
 	pr.CharLimit = 200
 
 	return Model{
-		wa:          client,
-		cfg:         cfg,
-		images:      images,
-		player:      pl,
-		focused:     true,
-		names:       map[string]string{},
-		forceShow:   map[string]bool{},
-		forceHide:   map[string]bool{},
-		shownImages: map[string]media.Quality{},
-		expanded:    map[string]bool{},
-		unread:      map[string]int{},
-		blocks:      map[string]cachedBlock{},
-		foldable:    map[string]bool{},
-		vp:          viewport.New(0, 0),
-		input:       in,
-		prompt:      pr,
+		wa:             client,
+		cfg:            cfg,
+		images:         images,
+		player:         pl,
+		focused:        true,
+		names:          map[string]string{},
+		forceShow:      map[string]bool{},
+		forceHide:      map[string]bool{},
+		shownImages:    map[string]media.Quality{},
+		expanded:       map[string]bool{},
+		unread:         map[string]int{},
+		blocks:         map[string]cachedBlock{},
+		members:        map[string][]wa.Mentionable{},
+		membersLoading: map[string]bool{},
+		membersFailed:  map[string]time.Time{},
+		membersAt:      map[string]time.Time{},
+		foldable:       map[string]bool{},
+		vp:             viewport.New(0, 0),
+		input:          in,
+		prompt:         pr,
 	}
 }
 
@@ -187,6 +198,17 @@ func (m *Model) setFlash(text string, isErr bool) {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	// an open group needs its members for the header (and @mentions)
+	if nm, ok := next.(Model); ok {
+		if load := nm.ensureMembersCmd(); load != nil {
+			return nm, tea.Batch(cmd, load)
+		}
+	}
+	return next, cmd
+}
+
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -209,6 +231,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.refresh()
+		if m.info != nil && m.info.message != nil {
+			cur := m.info.message.msg
+			for _, fresh := range m.messages {
+				if fresh.ID == cur.ID {
+					cur = fresh // status ticks too
+				}
+			}
+			m.info.message = m.loadMessageInfo(cur) // new receipts show up live
+		}
 		return m, m.markReadCmd()
 	case infoLoadedMsg:
 		return m.infoLoaded(msg)
@@ -246,12 +277,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setFlash(msg.info, false)
 		}
 		return m, nil
+	case membersMsg:
+		return m.gotMembers(msg)
 	case editorDoneMsg:
 		if msg.err != nil {
 			m.setFlash("editor: "+msg.err.Error(), true)
 			return m, nil
 		}
-		m.input.SetValue(strings.TrimRight(msg.text, "\n"))
+		m.input.SetValueKeepMentions(strings.TrimRight(msg.text, "\n"))
 		m.input.CursorEnd()
 		m.enterInsert()
 		return m, nil
@@ -264,7 +297,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) layout() {
 	chatW := m.width - m.listWidth()
 	m.vp.Width = chatW - 2
-	m.vp.Height = max(1, m.mainH()-m.composeH()-2)
+	m.vp.Height = max(1, m.mainH()-m.composeH()-headerH-2)
 	m.input.SetWidth(chatW - 2)
 	m.prompt.Width = m.width - 2
 }
@@ -485,7 +518,8 @@ func (m Model) markReadCmd() tea.Cmd {
 	}
 }
 
-func (m *Model) sendCmd(text string) tea.Cmd {
+// sendCmd sends text; mentions are the JIDs @mentioned in it.
+func (m *Model) sendCmd(text string, mentions []string) tea.Cmd {
 	client, jid := m.wa, m.openJID
 	replyTo, editing := m.replyTo, m.editing
 	m.replyTo, m.editing = nil, nil
@@ -497,9 +531,9 @@ func (m *Model) sendCmd(text string) tea.Cmd {
 		case editing != nil:
 			err = client.Edit(ctx, *editing, text)
 		case replyTo != nil:
-			err = client.Reply(ctx, jid, text, *replyTo)
+			err = client.Reply(ctx, jid, text, *replyTo, mentions)
 		default:
-			err = client.Send(ctx, jid, text)
+			err = client.Send(ctx, jid, text, mentions)
 		}
 		if err != nil {
 			return actionDoneMsg{err: err}

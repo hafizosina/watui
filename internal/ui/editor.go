@@ -1,12 +1,15 @@
 package ui
 
 import (
+	"sort"
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type vimMode int
@@ -63,13 +66,113 @@ type editor struct {
 	height      int
 	scroll      int
 	placeholder string
+
+	// A picked @mention is one rune in buf (atomBase+n), drawn as its label, so the
+	// cursor can't go inside it and deleting it removes the whole mention.
+	atoms    map[rune]atom
+	nextAtom rune
+}
+
+type atom struct {
+	label string // "@Name", what Compose shows
+	user  string // sent as "@" + user
+	jid   string // listed in the message so WhatsApp notifies them
+}
+
+// atomBase is in Supplementary Private Use Area-A, away from Nerd Font icons.
+const atomBase rune = 0xF0000
+
+func isAtom(r rune) bool { return r >= atomBase && r < atomBase+0x10000 }
+
+// insertAtom replaces buf[from:cur] with a mention and a space after it.
+func (e *editor) insertAtom(from int, a atom) {
+	if e.atoms == nil {
+		e.atoms = map[rune]atom{}
+	}
+	r := atomBase + e.nextAtom
+	e.nextAtom = (e.nextAtom + 1) % 0x10000
+	e.atoms[r] = a
+	e.save()
+	e.replaceBeforeCursor(from, string([]rune{r, ' '}))
+}
+
+func (e *editor) expand(fn func(atom) string) string {
+	var b strings.Builder
+	for _, r := range e.buf {
+		if a, ok := e.atoms[r]; ok && isAtom(r) {
+			b.WriteString(fn(a))
+		} else if !isAtom(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// SendValue is the text to send ("@<user>" for mentions) and the mentioned JIDs.
+func (e *editor) SendValue() (string, []string) {
+	var jids []string
+	seen := map[string]bool{}
+	text := e.expand(func(a atom) string {
+		if !seen[a.jid] {
+			seen[a.jid] = true
+			jids = append(jids, a.jid)
+		}
+		return "@" + a.user
+	})
+	return text, jids
+}
+
+// SetValueKeepMentions is SetValue, turning labels of known mentions back into mentions
+// (after a round trip through $EDITOR).
+func (e *editor) SetValueKeepMentions(s string) {
+	type known struct {
+		r     rune
+		label string
+	}
+	var ks []known
+	for r, a := range e.atoms {
+		ks = append(ks, known{r, a.label})
+	}
+	sort.Slice(ks, func(i, j int) bool { return len(ks[i].label) > len(ks[j].label) })
+	for _, k := range ks {
+		s = replaceWhole(s, k.label, string(k.r))
+	}
+	e.SetValue(s)
+}
+
+// replaceWhole replaces label where it isn't followed by more of a word ("@Andi" but not "@Andika").
+func replaceWhole(s, label, with string) string {
+	var b strings.Builder
+	for {
+		i := strings.Index(s, label)
+		if i < 0 {
+			b.WriteString(s)
+			return b.String()
+		}
+		rest := s[i+len(label):]
+		next, _ := utf8.DecodeRuneInString(rest)
+		b.WriteString(s[:i])
+		if rest != "" && (unicode.IsLetter(next) || unicode.IsDigit(next) || next == '_') {
+			b.WriteString(label)
+		} else {
+			b.WriteString(with)
+		}
+		s = rest
+	}
+}
+
+func (e *editor) cellText(r rune) string {
+	if a, ok := e.atoms[r]; ok && isAtom(r) {
+		return a.label
+	}
+	return string(r)
 }
 
 func newEditor() *editor {
 	return &editor{mode: vimInsert, height: 3, placeholder: "press i to write a message"}
 }
 
-func (e *editor) Value() string      { return string(e.buf) }
+func (e *editor) Value() string      { return e.expand(func(a atom) string { return a.label }) }
 func (e *editor) Height() int        { return e.height }
 func (e *editor) SetWidth(w int)     { e.width = max(4, w) }
 func (e *editor) Focus(mode vimMode) { e.focused, e.mode = true, mode }
@@ -147,6 +250,8 @@ func classOf(r rune) class {
 		return 0
 	case unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_':
 		return 1
+	case isAtom(r):
+		return 3
 	}
 	return 2
 }
@@ -680,6 +785,13 @@ func (e *editor) undoStep(from, to *[]snapshot) {
 }
 
 func (e *editor) cursorCell(r rune) string {
+	if isAtom(r) {
+		s := ansi.Truncate(e.cellText(r), max(1, e.width-1), "…")
+		if e.mode == vimInsert {
+			return styleMention.Underline(true).Render(s)
+		}
+		return lipgloss.NewStyle().Foreground(colOnAccent).Background(colBlue).Render(s)
+	}
 	blank := r == ' ' && (e.cur >= len(e.buf) || e.buf[e.cur] == '\n')
 	switch {
 	case e.mode == vimInsert && blank:
@@ -730,7 +842,7 @@ func (e *editor) View() string {
 			row, rowW = nil, 0
 			continue
 		}
-		rw := max(1, lipgloss.Width(string(r)))
+		rw := max(1, lipgloss.Width(e.cellText(r)))
 		if rowW+rw > w {
 			rows = append(rows, row)
 			row, rowW = nil, 0
@@ -754,12 +866,17 @@ func (e *editor) View() string {
 		var b strings.Builder
 		b.WriteString(" ")
 		for _, c := range rows[ri] {
-			s := string(c.r)
+			s := e.cellText(c.r)
+			if isAtom(c.r) {
+				s = ansi.Truncate(s, w, "…")
+			}
 			switch {
 			case e.focused && c.pos == e.cur:
 				b.WriteString(e.cursorCell(c.r))
 			case c.pos >= selFrom && c.pos < selTo:
 				b.WriteString(selStyle.Render(s))
+			case isAtom(c.r):
+				b.WriteString(styleMention.Render(s))
 			default:
 				b.WriteString(styleText.Render(s))
 			}

@@ -24,6 +24,9 @@ type Config struct {
 
 	CollapseLines int
 
+	// ShowDeleted shows what a message said after its sender deleted it for everyone.
+	ShowDeleted bool
+
 	Notify      NotifyMode
 	NotifySound string
 
@@ -45,6 +48,7 @@ func Default() Config {
 		ImageHeight: 15,
 
 		CollapseLines: 15,
+		ShowDeleted:   true,
 
 		Notify:      NotifyOn,
 		NotifySound: "watui",
@@ -71,6 +75,10 @@ image_height = 15
 
 # Long messages show only this many lines until you expand them (Space → Expand). 0 = never fold.
 collapse_lines = 15
+
+# Messages deleted for everyone: on = keep showing what they said (marked "deleted"),
+# off = show only "message deleted". The content is kept either way.
+show_deleted = on
 
 # Desktop notifications for new messages:
 #   on       sender + message text
@@ -175,6 +183,15 @@ func (c *Config) Set(assignment string) error {
 			}
 		}
 		c.NotifySound = value
+	case "show_deleted":
+		switch value {
+		case "on", "true", "yes":
+			c.ShowDeleted = true
+		case "off", "false", "no":
+			c.ShowDeleted = false
+		default:
+			return fmt.Errorf("show_deleted must be on or off, got %q", value)
+		}
 	case "collapse_lines":
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 0 {

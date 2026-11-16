@@ -291,7 +291,7 @@ func (m *Model) openMessageMenu() {
 			return nil
 		}})
 	}
-	if msg.MediaType == wa.MediaVideo && !msg.Deleted {
+	if msg.MediaType == wa.MediaVideo && !m.gone(msg) {
 		items = append(items, menuItem{label: "Play video", key: "o", run: func(m *Model) tea.Cmd {
 			m.setFlash("downloading video…", false)
 			client := m.wa
@@ -304,7 +304,7 @@ func (m *Model) openMessageMenu() {
 			})
 		}})
 	}
-	if msg.MediaType == wa.MediaAudio && !msg.Deleted && m.player != nil {
+	if msg.MediaType == wa.MediaAudio && !m.gone(msg) && m.player != nil {
 		st, playing := m.player.State()
 		if playing && st.MsgID == msg.ID {
 			label := "Pause"
@@ -339,7 +339,7 @@ func (m *Model) openMessageMenu() {
 			}})
 		}
 	}
-	if msg.MediaType == wa.MediaDoc && !msg.Deleted {
+	if msg.MediaType == wa.MediaDoc && !m.gone(msg) {
 		client := m.wa
 		items = append(items, menuItem{label: "Open file", key: "o", run: func(m *Model) tea.Cmd {
 			m.setFlash("downloading…", false)
@@ -363,7 +363,7 @@ func (m *Model) openMessageMenu() {
 			}})
 		}
 	}
-	if msg.MediaType != "" && !msg.Deleted {
+	if msg.MediaType != "" && !m.gone(msg) {
 		items = append(items, menuItem{label: "Save to ~/Downloads/WhatsApp", key: "S", run: func(m *Model) tea.Cmd {
 			client := m.wa
 			when := msg.TS.Local().Format("20060102-150405")
@@ -378,7 +378,7 @@ func (m *Model) openMessageMenu() {
 			}
 		}})
 	}
-	if (msg.MediaType == wa.MediaImage || msg.MediaType == wa.MediaSticker || msg.MediaType == wa.MediaVideo) && !msg.Deleted && m.images != nil {
+	if (msg.MediaType == wa.MediaImage || msg.MediaType == wa.MediaSticker || msg.MediaType == wa.MediaVideo) && !m.gone(msg) && m.images != nil {
 		q, shown := m.shownImages[msg.ID]
 		if shown && q == media.Full {
 			items = append(items, menuItem{label: "Hide image", key: "v", run: func(m *Model) tea.Cmd {
@@ -402,13 +402,13 @@ func (m *Model) openMessageMenu() {
 			}})
 		}
 	}
-	if msg.MediaType == "" && !msg.Deleted && isMediaText(msg.Text) {
+	if msg.MediaType == "" && !m.gone(msg) && isMediaText(msg.Text) {
 		items = append(items, menuItem{label: "Media not available (old message)", key: "v", run: func(m *Model) tea.Cmd {
 			m.setFlash("Saved before watui kept media info. To get it: quit, run `watui logout`, then `watui` and scan the QR.", true)
 			return nil
 		}})
 	}
-	if !msg.Deleted && msg.Text != "" {
+	if !m.gone(msg) && msg.Text != "" {
 		items = append(items, menuItem{label: "Copy text", key: "y", run: func(m *Model) tea.Cmd {
 			return copyCmd(plainText(msg))
 		}})
@@ -461,9 +461,10 @@ func (m *Model) openMessageMenu() {
 			return m.personInfoCmd(who, name)
 		}})
 	}
-	if len(items) == 0 {
-		return
-	}
+	items = append(items, menuItem{label: "Message info", key: "I", run: func(m *Model) tea.Cmd {
+		m.openMessageInfo(msg)
+		return nil
+	}})
 	m.menu = &menu{title: "Message", items: items}
 }
 

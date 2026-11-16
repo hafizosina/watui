@@ -102,6 +102,9 @@ func (m Model) emojiSuggestions() (int, string, []emojiEntry) {
 }
 
 func (m Model) insertKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if next, handled := m.mentionKeyPress(k); handled {
+		return next, nil
+	}
 	if from, query, list := m.emojiSuggestions(); len(list) > 0 {
 		switch k.String() {
 		case "tab", "ctrl+y":
@@ -122,12 +125,13 @@ func (m Model) insertKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch k.String() {
 	case "ctrl+s":
-		text := strings.TrimSpace(m.input.Value())
+		text, mentions := m.input.SendValue()
+		text = strings.TrimSpace(text)
 		if text == "" || m.openJID == "" {
 			return m, nil
 		}
 		m.input.Reset()
-		cmd := m.sendCmd(text)
+		cmd := m.sendCmd(text, mentions)
 		return m, cmd
 	case "ctrl+e":
 		return m, m.editorCmd()
@@ -136,7 +140,8 @@ func (m Model) insertKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.enterNormal()
 	}
 	m.emojiSel = 0
-	return m, nil
+	m.mentionSel = 0
+	return m, m.loadMembersCmd()
 }
 
 func (m Model) promptKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -513,7 +518,7 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 		_, arg, _ := strings.Cut(cmd, " ")
 		arg = strings.TrimSpace(arg)
 		if arg == "" {
-			m.setFlash(fmt.Sprintf("images=%s image_width=%d image_height=%d collapse_lines=%d notify=%s", m.cfg.Images, m.cfg.ImageWidth, m.cfg.ImageHeight, m.cfg.CollapseLines, m.cfg.Notify), false)
+			m.setFlash(fmt.Sprintf("images=%s image_width=%d image_height=%d collapse_lines=%d notify=%s show_deleted=%s", m.cfg.Images, m.cfg.ImageWidth, m.cfg.ImageHeight, m.cfg.CollapseLines, m.cfg.Notify, onOff(m.cfg.ShowDeleted)), false)
 			return m, nil
 		}
 		if err := m.cfg.Set(arg); err != nil {
@@ -523,6 +528,7 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 		if m.images != nil {
 			m.images.Reset()
 		}
+		m.blocks = map[string]cachedBlock{}
 		m.renderMessages(false)
 		m.setFlash("set "+arg+" (for this session — edit ~/.config/watui/config to keep it)", false)
 		return m, nil

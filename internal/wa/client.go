@@ -248,10 +248,9 @@ func (c *Client) onMessage(ctx context.Context, e *events.Message, history bool)
 		}
 	}
 	sender := c.normalize(ctx, e.Info.Sender)
+	// a message you sent from your phone arrives here as a copy: it is sent (✓), and
+	// only the recipient's receipts make it delivered (✓✓) or read
 	status := store.StatusSent
-	if e.Info.IsFromMe {
-		status = store.StatusDelivered
-	}
 	if history && e.SourceWebMsg != nil {
 		status = webStatus(e.SourceWebMsg.GetStatus())
 	}
@@ -275,6 +274,9 @@ func (c *Client) onMessage(ctx context.Context, e *events.Message, history bool)
 		QuoteSender: quoteSender,
 		QuoteText:   quoteText,
 		Forwarded:   ci.GetIsForwarded(),
+	}
+	if !e.Info.IsFromMe && !history {
+		msg.ReceivedAt = time.Now()
 	}
 	if !e.Info.IsFromMe {
 		msg.MentionsMe = c.mentionsMe(ctx, ci.GetMentionedJID())
@@ -381,20 +383,46 @@ func (c *Client) onHistorySync(ctx context.Context, data *waHistorySync.HistoryS
 }
 
 func (c *Client) onReceipt(ctx context.Context, e *events.Receipt) {
+	at := e.Timestamp
+	if at.IsZero() {
+		at = time.Now()
+	}
 	switch e.Type {
 	case types.ReceiptTypeDelivered:
+		if e.IsFromMe {
+			return // your own phone/other devices got the copy; the recipient may not have it yet
+		}
 		c.check(c.Store.SetStatusByIDs(e.MessageIDs, store.StatusDelivered))
+		c.putReceipt(ctx, e, store.ReceiptDelivered, at)
 	case types.ReceiptTypeRead, types.ReceiptTypePlayed:
 		if e.IsFromMe {
 			chat := c.normalize(ctx, e.Chat)
-			c.check(c.Store.MarkReadByIDs(chat.String(), e.MessageIDs))
+			c.check(c.Store.MarkReadByIDs(chat.String(), e.MessageIDs, at))
 			return
 		}
 		c.check(c.Store.SetStatusByIDs(e.MessageIDs, store.StatusRead))
+		kind := store.ReceiptRead
+		if e.Type == types.ReceiptTypePlayed {
+			kind = store.ReceiptPlayed
+		}
+		c.putReceipt(ctx, e, kind, at)
 	case types.ReceiptTypeReadSelf:
 		chat := c.normalize(ctx, e.Chat)
-		c.check(c.Store.MarkReadByIDs(chat.String(), e.MessageIDs))
+		c.check(c.Store.MarkReadByIDs(chat.String(), e.MessageIDs, at))
 	}
+}
+
+// putReceipt keeps who got/read your message and when, for Message info.
+func (c *Client) putReceipt(ctx context.Context, e *events.Receipt, kind string, at time.Time) {
+	if e.IsFromMe {
+		return // your own other devices
+	}
+	chat := c.normalize(ctx, e.Chat)
+	user := c.normalize(ctx, e.Sender)
+	if user.IsEmpty() {
+		user = chat
+	}
+	c.check(c.Store.PutReceipt(chat.String(), e.MessageIDs, user.String(), kind, at))
 }
 
 func (c *Client) loadGroupNames(ctx context.Context) {
@@ -476,7 +504,9 @@ func (c *Client) ChatName(chat store.Chat) string {
 	return c.contactName(context.Background(), jid, "")
 }
 
-func (c *Client) Send(ctx context.Context, chatJID, text string) error {
+// Send sends a text message; mentions are the JIDs of people @mentioned in it
+// (the text carries "@" + their JID user).
+func (c *Client) Send(ctx context.Context, chatJID, text string, mentions []string) error {
 	jid, err := types.ParseJID(chatJID)
 	if err != nil {
 		return err
@@ -495,7 +525,14 @@ func (c *Client) Send(ctx context.Context, chatJID, text string) error {
 	}
 	c.check(c.Store.PutMessage(msg))
 	c.notify()
-	_, err = c.WA.SendMessage(ctx, jid, &waE2E.Message{Conversation: proto.String(text)}, whatsmeow.SendRequestExtra{ID: id})
+	content := &waE2E.Message{Conversation: proto.String(text)}
+	if len(mentions) > 0 {
+		content = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+			Text:        proto.String(text),
+			ContextInfo: &waE2E.ContextInfo{MentionedJID: mentions},
+		}}
+	}
+	_, err = c.WA.SendMessage(ctx, jid, content, whatsmeow.SendRequestExtra{ID: id})
 	if err != nil {
 		c.check(c.Store.SetStatus(chatJID, id, store.StatusFailed))
 		c.notify()
@@ -680,4 +717,21 @@ func (c *Client) mentionsMe(ctx context.Context, mentioned []string) bool {
 		}
 	}
 	return false
+}
+
+// MessageInfo is what Message info shows: receipts for a message you sent, or when an
+// incoming one arrived and when you read it.
+type MessageInfo struct {
+	Receipts []store.Receipt
+	Received time.Time
+	Read     time.Time
+}
+
+func (c *Client) MessageInfo(m store.Message) (MessageInfo, error) {
+	if m.FromMe {
+		rs, err := c.Store.Receipts(m.ChatJID, m.ID)
+		return MessageInfo{Receipts: rs}, err
+	}
+	rec, read, err := c.Store.MessageTimes(m.ChatJID, m.ID)
+	return MessageInfo{Received: rec, Read: read}, err
 }

@@ -21,6 +21,7 @@ type infoState struct {
 	err     error
 	person  *wa.Person
 	group   *wa.Group
+	message *msgInfo
 	cursor  int
 	offset  int
 }
@@ -91,6 +92,10 @@ func (m Model) infoLoaded(msg infoLoadedMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) infoKey(key string) (tea.Model, tea.Cmd, bool) {
+	if m.info.message != nil {
+		next, handled := m.messageInfoKey(key)
+		return next, nil, handled
+	}
 	in := m.info
 	n := 0
 	if in.group != nil {
@@ -154,10 +159,16 @@ func (m Model) infoKey(key string) (tea.Model, tea.Cmd, bool) {
 }
 
 func (m Model) infoTitle() string {
+	if m.info.message != nil {
+		return "[3] Message info"
+	}
 	return "[3] Info · " + sanitize(m.info.title)
 }
 
 func (m Model) infoFooter() string {
+	if m.info.message != nil {
+		return "j/k scroll · esc back"
+	}
 	if m.info.group != nil {
 		return "o open group chat · j/k member · enter message member · space details · y copy · esc back"
 	}
@@ -262,6 +273,9 @@ func (m Model) infoView(w, h int) string {
 		return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, styleDim.Render("◌ loading details…"))
 	case in.err != nil:
 		return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, styleError.Render(in.err.Error()))
+	}
+	if in.message != nil {
+		return m.messageInfoView(in, w, h)
 	}
 	if p := in.person; p != nil {
 		return m.personView(p, w)
