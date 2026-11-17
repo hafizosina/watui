@@ -5,8 +5,9 @@ import (
 	"encoding/binary"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
+
+	"github.com/zhenzhu/watui/internal/desktop"
 )
 
 const sampleRate = 44100
@@ -92,18 +93,6 @@ func SoundFiles(dir string) (message, call string, err error) {
 	return message, call, nil
 }
 
-// Play plays a sound file in the background with the first available player.
-func Play(path string) {
-	if path == "" {
-		return
-	}
-	for _, player := range [][]string{{"paplay"}, {"pw-play"}, {"aplay", "-q"}, {"mpv", "--no-video", "--really-quiet"}} {
-		if p, err := exec.LookPath(player[0]); err == nil {
-			cmd := exec.Command(p, append(player[1:], path)...)
-			if cmd.Start() == nil {
-				go func() { _ = cmd.Wait() }()
-			}
-			return
-		}
-	}
-}
+// Play plays a sound file in the background with the first available player
+// (paplay / pw-play / aplay on Linux, afplay on macOS, else mpv).
+func Play(path string) { desktop.Play(path) }

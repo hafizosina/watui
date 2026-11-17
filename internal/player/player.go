@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/zhenzhu/watui/internal/desktop"
 	"net"
 	"os"
 	"os/exec"
@@ -182,10 +183,5 @@ func OpenVideo(path string, loop bool) error {
 		go func() { _ = cmd.Wait() }()
 		return nil
 	}
-	cmd := exec.Command("xdg-open", path)
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	go func() { _ = cmd.Wait() }()
-	return nil
+	return desktop.Open(path)
 }

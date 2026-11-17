@@ -1,19 +1,16 @@
 package ui
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/zhenzhu/watui/internal/desktop"
 	"github.com/zhenzhu/watui/internal/wa"
 )
 
@@ -39,16 +36,7 @@ func pasteCmd() tea.Cmd {
 }
 
 // clipboardWriter puts Compose's yanks on the system clipboard; tests swap it out.
-var clipboardWriter = func(text string) {
-	if _, err := exec.LookPath("xclip"); err != nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "xclip", "-selection", "clipboard", "-i")
-	cmd.Stdin = strings.NewReader(text)
-	_ = cmd.Run() // xclip keeps serving it in the background
-}
+var clipboardWriter = func(text string) { _ = desktop.CopyText(text) }
 
 // vimPasteCmd is p / P in Compose's vim normal mode. It pastes whatever was
 // copied last, here or in another app: a file or picture is attached, text is
@@ -61,94 +49,37 @@ func vimPasteCmd(key string) tea.Cmd {
 	}
 }
 
-func xclipOut(target string) ([]byte, error) {
-	args := []string{"-selection", "clipboard", "-o"}
-	if target != "" {
-		args = append(args, "-t", target)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	return exec.CommandContext(ctx, "xclip", args...).Output()
-}
-
 func readClipboard() clipboardMsg {
-	if _, err := exec.LookPath("xclip"); err != nil {
-		return clipboardMsg{err: errors.New("paste needs xclip (sudo apt install xclip)")}
-	}
-	raw, err := xclipOut("TARGETS")
-	if err != nil {
-		return clipboardMsg{err: errors.New("clipboard is empty")}
-	}
-	targets := map[string]bool{}
-	for _, t := range strings.Fields(string(raw)) {
-		targets[t] = true
-	}
-	// files copied in Nemo / Nautilus / most file managers
-	for _, t := range []string{"x-special/gnome-copied-files", "text/uri-list"} {
-		if !targets[t] {
-			continue
+	clip, err := desktop.ReadClipboard()
+	switch {
+	case err != nil:
+		return clipboardMsg{err: err}
+	case len(clip.Files) > 0:
+		files := make([]attachment, len(clip.Files))
+		for i, f := range clip.Files {
+			files[i] = attachment{path: f}
 		}
-		if out, err := xclipOut(t); err == nil {
-			if files := filesFromURIs(string(out)); len(files) > 0 {
-				return clipboardMsg{files: files}
-			}
-		}
-	}
-	// a copied picture (screenshot tool, browser "Copy image", …)
-	for _, t := range []string{"image/png", "image/jpeg"} {
-		if !targets[t] {
-			continue
-		}
-		data, err := xclipOut(t)
-		if err != nil || len(data) == 0 {
-			continue
-		}
-		path, err := writePasted(data, "."+strings.TrimPrefix(t, "image/"))
+		return clipboardMsg{files: files}
+	case len(clip.Image) > 0:
+		path, err := writePasted(clip.Image, clip.ImageExt)
 		if err != nil {
 			return clipboardMsg{err: err}
 		}
 		return clipboardMsg{files: []attachment{{path: path, temp: true}}}
 	}
-	out, err := xclipOut("")
-	if err != nil || len(out) == 0 {
-		return clipboardMsg{err: errors.New("nothing to paste")}
-	}
-	text := string(out)
 	// a copied path (or several, one per line) is a file too
-	if files := filesFromURIs(text); len(files) > 0 {
+	if files := filesFromURIs(clip.Text); len(files) > 0 {
 		return clipboardMsg{files: files}
 	}
-	return clipboardMsg{text: text}
+	return clipboardMsg{text: clip.Text}
 }
 
 // filesFromURIs reads file:// URIs or absolute paths, one per line; any line
 // that isn't an existing file makes the whole thing plain text.
 func filesFromURIs(s string) []attachment {
 	var out []attachment
-	for _, line := range strings.Split(strings.ReplaceAll(s, "\r", ""), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || line == "copy" || line == "cut" {
-			continue
-		}
-		path := line
-		if strings.HasPrefix(line, "file://") {
-			u, err := url.Parse(line)
-			if err != nil {
-				return nil
-			}
-			path = u.Path
-		} else if strings.HasPrefix(line, "~/") {
-			if home, err := os.UserHomeDir(); err == nil {
-				path = filepath.Join(home, line[2:])
-			}
-		}
-		if !filepath.IsAbs(path) {
-			return nil
-		}
-		if st, err := os.Stat(path); err != nil || st.IsDir() {
-			return nil
-		}
-		out = append(out, attachment{path: path})
+	for _, f := range desktop.FileList(s) {
+		out = append(out, attachment{path: f})
 	}
 	return out
 }
@@ -178,24 +109,13 @@ type filesPickedMsg struct {
 
 func pickFilesCmd() tea.Cmd {
 	return func() tea.Msg {
-		home, _ := os.UserHomeDir()
-		cmd := exec.Command("zenity", "--file-selection", "--multiple", "--separator=\n",
-			"--title=Send files with watui", "--filename="+home+"/")
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		out, err := cmd.Output()
+		paths, err := desktop.PickFiles("Send files with watui")
 		if err != nil {
-			var exit *exec.ExitError
-			if errors.As(err, &exit) && exit.ExitCode() == 1 {
-				return filesPickedMsg{} // cancelled
-			}
-			return filesPickedMsg{err: fmt.Errorf("file picker: %v %s", err, strings.TrimSpace(stderr.String()))}
+			return filesPickedMsg{err: err}
 		}
 		var files []attachment
-		for _, p := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			if p != "" {
-				files = append(files, attachment{path: p})
-			}
+		for _, p := range paths {
+			files = append(files, attachment{path: p})
 		}
 		return filesPickedMsg{files: files}
 	}
@@ -208,7 +128,7 @@ func (m *Model) openFilePicker() tea.Cmd {
 		m.setFlash("open a chat first", true)
 		return nil
 	}
-	if _, err := exec.LookPath("zenity"); err == nil && os.Getenv("DISPLAY")+os.Getenv("WAYLAND_DISPLAY") != "" {
+	if desktop.CanPickFiles() {
 		m.setFlash("choose files in the dialog…", false)
 		return pickFilesCmd()
 	}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 )
 
 type instanceLock struct {
@@ -67,14 +68,38 @@ func describe(pid int) *runningError {
 	if pid <= 0 {
 		return e
 	}
-	if exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid)); err == nil {
-		e.exe = exe
-	}
-	if tty, err := os.Readlink(fmt.Sprintf("/proc/%d/fd/0", pid)); err == nil && strings.HasPrefix(tty, "/dev/pts/") {
-		e.tty = tty
-		e.pane = tmuxPaneFor(tty)
+	e.exe, e.tty = processInfo(pid)
+	if e.tty != "" {
+		e.pane = tmuxPaneFor(e.tty)
 	}
 	return e
+}
+
+// processInfo finds a process's program and terminal: from /proc on Linux,
+// from ps elsewhere (macOS).
+func processInfo(pid int) (exe, tty string) {
+	if p, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid)); err == nil {
+		exe = p
+		if t, err := os.Readlink(fmt.Sprintf("/proc/%d/fd/0", pid)); err == nil && strings.HasPrefix(t, "/dev/pts/") {
+			tty = t
+		}
+		return exe, tty
+	}
+	out, err := execOutput("ps", "-o", "tty=", "-o", "comm=", "-p", strconv.Itoa(pid))
+	if err != nil {
+		return "", ""
+	}
+	return parsePS(out)
+}
+
+// parsePS reads "ttys003 /Applications/kitty.app/…/watui" (ps -o tty= -o comm=).
+func parsePS(out string) (exe, tty string) {
+	t, comm, _ := strings.Cut(strings.TrimSpace(out), " ")
+	exe = strings.TrimSpace(comm)
+	if t != "" && t != "??" && t != "?" {
+		tty = "/dev/" + t
+	}
+	return exe, tty
 }
 
 func tmuxPaneFor(tty string) string {
@@ -128,6 +153,5 @@ func waitForLock(dir string, timeout time.Duration) (*instanceLock, error) {
 }
 
 func isTerminal() bool {
-	_, err := unix.IoctlGetTermios(int(os.Stdin.Fd()), unix.TCGETS)
-	return err == nil
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }

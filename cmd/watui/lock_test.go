@@ -73,3 +73,16 @@ func TestHelperHoldLock(t *testing.T) {
 	}
 	time.Sleep(30 * time.Second)
 }
+
+func TestParsePS(t *testing.T) {
+	for _, c := range []struct{ out, exe, tty string }{
+		{"ttys003 /Users/me/.local/bin/watui\n", "/Users/me/.local/bin/watui", "/dev/ttys003"},
+		{"??       watui", "watui", ""},
+		{"pts/4    watui", "watui", "/dev/pts/4"},
+	} {
+		exe, tty := parsePS(c.out)
+		if exe != c.exe || tty != c.tty {
+			t.Errorf("parsePS(%q) = %q, %q; want %q, %q", c.out, exe, tty, c.exe, c.tty)
+		}
+	}
+}

@@ -6,7 +6,15 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: watui-linux-amd64
+          - os: macos-latest
+            artifact: watui-macos-arm64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -27,5 +35,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: watui-linux-amd64
+          name: ${{ matrix.artifact }}
           path: bin/watui

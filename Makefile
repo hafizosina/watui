@@ -1,6 +1,6 @@
 export PATH := /usr/local/go/bin:$(PATH)
 
-APP_DIR := $(HOME)/App/WaTui
+APP_DIR ?= $(HOME)/App/WaTui
 VERSION := $(shell git describe --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 

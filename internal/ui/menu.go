@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/zhenzhu/watui/internal/desktop"
 	"github.com/zhenzhu/watui/internal/media"
 	"github.com/zhenzhu/watui/internal/player"
 	"github.com/zhenzhu/watui/internal/store"
@@ -349,7 +350,7 @@ func (m *Model) openMessageMenu() {
 				if err != nil {
 					return err
 				}
-				return xdgOpen(path)
+				return desktop.Open(path)
 			})
 		}})
 		if isTextFile(client.FileName(msg.ChatJID, msg.ID)) {
@@ -408,7 +409,7 @@ func (m *Model) openMessageMenu() {
 				if err != nil {
 					return err
 				}
-				return xdgOpen(path)
+				return desktop.Open(path)
 			})
 		}})
 	}
@@ -574,9 +575,7 @@ func isMediaText(text string) bool {
 
 func copyCmd(text string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command("xclip", "-selection", "clipboard")
-		cmd.Stdin = strings.NewReader(text)
-		if err := cmd.Run(); err != nil {
+		if err := desktop.CopyText(text); err != nil {
 			return actionDoneMsg{err: fmt.Errorf("copy: %w", err)}
 		}
 		return actionDoneMsg{info: "copied"}

@@ -331,12 +331,12 @@ func (l *loginExec) Run() error {
 		out = os.Stdout
 	}
 	fd := int(os.Stdin.Fd())
-	if old, err := unix.IoctlGetTermios(fd, unix.TCGETS); err == nil {
+	if old, err := unix.IoctlGetTermios(fd, ioctlGetTermios); err == nil {
 		t := *old
 		t.Lflag &^= unix.ISIG | unix.ICANON | unix.ECHO
 		t.Cc[unix.VMIN], t.Cc[unix.VTIME] = 1, 0
-		_ = unix.IoctlSetTermios(fd, unix.TCSETS, &t)
-		defer unix.IoctlSetTermios(fd, unix.TCSETS, old)
+		_ = unix.IoctlSetTermios(fd, ioctlSetTermios, &t)
+		defer unix.IoctlSetTermios(fd, ioctlSetTermios, old)
 	}
 	cancel := make(chan struct{})
 	cr, err := cancelreader.NewReader(os.Stdin)

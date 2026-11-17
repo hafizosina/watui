@@ -11,10 +11,12 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.53
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/muesli/cancelreader v0.2.2
+	github.com/muesli/termenv v0.16.0
 	github.com/rs/zerolog v1.35.1
 	go.mau.fi/whatsmeow v0.0.0-20261113220833-ecc39170bc14
 	golang.org/x/image v0.48.0
 	golang.org/x/sys v0.50.0
+	golang.org/x/term v0.47.0
 	google.golang.org/protobuf v1.36.12
 )
 
@@ -39,7 +41,6 @@ require (
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
-	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/petermattis/goid v0.0.0-20260918085751-abfca077860b // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.27 // indirect
@@ -50,7 +51,6 @@ require (
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
-	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
 	rsc.io/qr v0.2.0 // indirect
 )

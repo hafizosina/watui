@@ -19,13 +19,90 @@ Rendered from demo data (`make screenshots`). Pictures, stickers and GIFs are dr
 | ![Catppuccin](docs/screenshots/theme-catppuccin-mocha.png) **Theme** catppuccin-mocha | |
 | ![Gruvbox](docs/screenshots/theme-gruvbox-dark.png) **Theme** gruvbox-dark | ![Nord](docs/screenshots/theme-nord.png) **Theme** nord |
 
+## Platform support
+
+| Platform | Status |
+|---|---|
+| **Linux** | Supported. X11, or Wayland through XWayland (copy/paste uses `xclip`). |
+| **Windows** | Through **WSL2** — watui runs in the Linux side. Not tested yet. Native Windows doesn't build. |
+| **macOS** | **New, not yet tried on a real Mac** — it builds and its tests run on macOS in CI; reports welcome. Notifications can't open the chat when clicked (see [macOS](#macos)). |
+
 ## Install
 
-You need Go 1.23+ (`/usr/local/go`) and gcc (for SQLite).
+### Linux
+
+**1. Build tools:** Go **1.26+** ([go.dev/dl](https://go.dev/dl/) — distro packages are often older) and a C compiler (SQLite is built with cgo).
+
+**2. Terminal:** [kitty](https://sw.kovidgoyal.net/kitty/) is recommended — it draws pictures, stickers and GIFs inline. Any other terminal works with `images = off` in the [settings](#settings).
+
+**3. Optional tools** — watui runs without them; each one turns on a feature:
+
+| Tool | For |
+|---|---|
+| `mpv` | voice notes, audio and video playback |
+| `ffmpeg` (with `ffprobe`) | video previews, GIFs, video length when sending |
+| ImageMagick (`convert`) | animated stickers |
+| `xclip` | copy, paste, sending pasted pictures and files |
+| `zenity` | file dialog for sending files (`u`) |
+| `notify-send` (libnotify) | desktop notifications |
+| `paplay`, `pw-play` or `aplay` | notification sounds |
+| `xdg-open` (xdg-utils) | opening files, pictures and links |
 
 ```bash
-make deploy         # tests, builds, copies to ~/App/WaTui and links ~/.local/bin/watui
+# Debian / Ubuntu / Linux Mint
+sudo apt install build-essential mpv ffmpeg imagemagick xclip zenity libnotify-bin pulseaudio-utils xdg-utils
+
+# Fedora (mpv and ffmpeg come from RPM Fusion)
+sudo dnf install gcc mpv ffmpeg ImageMagick xclip zenity libnotify pulseaudio-utils xdg-utils
+
+# Arch
+sudo pacman -S base-devel mpv ffmpeg imagemagick xclip zenity libnotify libpulse xdg-utils
 ```
+
+**4. Build and install:**
+
+```bash
+git clone https://github.com/hafizosina/watui.git
+cd watui
+make build                                   # makes bin/watui
+install -Dm755 bin/watui ~/.local/bin/watui  # or anywhere on your PATH
+```
+
+Or `make deploy`: runs the tests, copies the binary to `~/App/WaTui` and links it as `~/.local/bin/watui`. Pick another folder with `make deploy APP_DIR=~/.local/opt/watui`.
+
+### Windows (WSL2)
+
+watui is a Linux program, so on Windows it runs inside WSL2:
+
+1. In PowerShell as administrator: `wsl --install -d Ubuntu`, then restart.
+2. Open Ubuntu and follow the [Linux](#linux) steps.
+3. Pictures: Windows Terminal can't draw them, so set `images = off`, or run kitty inside WSL (`sudo apt install kitty`, it opens as a window through WSLg) to get pictures.
+4. Copy/paste, notifications, the file dialog and opening files go through WSLg (Windows 11, or Windows 10 with a recent WSL). Not tested yet — reports welcome.
+
+### macOS
+
+1. Command line tools (C compiler for SQLite): `xcode-select --install`
+2. With [Homebrew](https://brew.sh): `brew install go kitty mpv ffmpeg imagemagick` (Go **1.26+**; kitty draws pictures — any other terminal works with `images = off`)
+3. Build and install:
+
+   ```bash
+   git clone https://github.com/hafizosina/watui.git
+   cd watui
+   make build
+   install -m755 bin/watui /usr/local/bin/watui   # or anywhere on your PATH
+   ```
+
+What macOS uses instead of the Linux tools — all built in, nothing to install:
+
+| Feature | macOS |
+|---|---|
+| Copy / paste text, pictures and Finder files | `pbcopy`, `pbpaste` and the pasteboard (through `osascript`) |
+| File dialog (`u`) | the macOS file picker (`osascript`) |
+| Open files, pictures and links | `open` |
+| Notifications | `osascript` — they pop up, but clicking them can't open the chat, there's no **Decline** button for calls, and each message is a new notification |
+| Sounds | `afplay` |
+
+Settings, chats and caches live in the same folders as on Linux (`~/.config/watui`, `~/.local/share/watui`, `~/.cache/watui`); only the notification sounds go to `~/Library/Caches/watui`.
 
 ## First run
 
@@ -85,7 +162,7 @@ A header above the messages shows who the open chat is with: avatar, name, pin/m
 | | `p` | paste a copied picture, file or text (see [Sending files and pictures](#sending-files-and-pictures)) |
 | | `u` | pick files to send (file dialog) |
 | | `i` / `a` / `Enter` | type a message |
-| | `e` | write the message in `$EDITOR` (nvim) |
+| | `e` | write the message in `$EDITOR` (`nvim` if it isn't set) |
 | | `q` / `Esc` | back to the list |
 | anywhere | `Ctrl+h` / `Ctrl+l` | Chats / Messages box; at the edge, the tmux pane next door |
 | | `Ctrl+j` / `Ctrl+k` | Messages ↔ Compose (Compose opens in NORMAL; from Compose only in NORMAL); at the edge, the tmux pane above/below |
@@ -162,7 +239,7 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 | Reply | `r` | the quote shows in the Compose title; `Esc` (in normal mode) cancels |
 | Edit | `e` | your own text messages, first 15 minutes |
 | React | `+` | 👍 ❤️ 😂 😮 😢 🙏 🔥 🎉, or remove yours |
-| Play video | `o` | downloads once, opens in an mpv window (GIFs loop); Celluloid/xdg-open if no mpv |
+| Play video | `o` | downloads once, opens in an mpv window (GIFs loop); the default video player if there's no mpv |
 | Play / Pause voice note | `o` | plays in the background with mpv; progress bar on the message and in the status box |
 | Speed | `.` | 1× → 1.5× → 2× while a voice note plays |
 | Stop | `x` | stop the voice note |
@@ -170,9 +247,9 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 | View in nvim | `v` | text/code documents (.py .go .sql .json .md .csv …), read-only; `:q` returns |
 | Save to ~/Downloads/WhatsApp | `S` | pictures, videos, voice notes, stickers, documents (original file name, never overwrites) |
 | Show / Hide image | `v` | shows pictures that are hidden (older than the newest 40, or `images=off`/`thumbnail`) |
-| Open image in viewer | `o` | pictures and stickers: downloads the original once (not the thumbnail shown in the chat), opens it with `xdg-open` |
-| Open link | `l` | messages with http(s)/www links: opens in the default browser (`xdg-open`); several links → pick one with `1`–`9` |
-| Copy text | `y` | via `xclip` |
+| Open image in viewer | `o` | pictures and stickers: downloads the original once (not the thumbnail shown in the chat), opens it in the default image viewer |
+| Open link | `l` | messages with http(s)/www links: opens in the default browser; several links → pick one with `1`–`9` |
+| Copy text | `y` | to the system clipboard |
 | Forward | `f` | type to search a chat, `Enter` to send |
 | Star / Unstar | `s` | ★ shows next to the message |
 | Pin | `p` | 24 hours, 7 days or 30 days, or unpin |
@@ -182,9 +259,9 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 ### Sending files and pictures
 
 - **Paste** — copy a picture (screenshot tool, browser *Copy image*) or one or more files (`Ctrl+C` in Nemo/Nautilus, or a copied path), then press `p` — in the messages pane, in the chat list (opens the highlighted chat first) or in Compose's vim normal mode — or `Ctrl+V` while typing. Copied text goes into Compose instead.
-- **Upload** — `u` in the messages pane opens the file dialog (zenity, pick several with `Ctrl`/`Shift`), or type `:upload ~/path/to/file.pdf`.
+- **Upload** — `u` in the messages pane opens the file dialog (pick several with `Ctrl`/`Shift`, `Cmd` on a Mac), or type `:upload ~/path/to/file.pdf`.
 
-The files wait in Compose (its title shows `📎 2 files: …`): type a caption if you like (it goes with the first file) and press `Ctrl+S`. `Esc` in the messages pane drops them. Attaching cancels a reply you started — files go out as new messages. A file you send opens and previews straight away, without downloading it back. JPEG/PNG pictures, MP4 videos and MP3/OGG/M4A audio up to 16 MB go as media; everything else, and anything bigger, as a document (up to 2 GB). Needs `xclip` for paste, `zenity` for the dialog, and `ffprobe`/`ffmpeg` for video length and preview (optional).
+The files wait in Compose (its title shows `📎 2 files: …`): type a caption if you like (it goes with the first file) and press `Ctrl+S`. `Esc` in the messages pane drops them. Attaching cancels a reply you started — files go out as new messages. A file you send opens and previews straight away, without downloading it back. JPEG/PNG pictures, MP4 videos and MP3/OGG/M4A audio up to 16 MB go as media; everything else, and anything bigger, as a document (up to 2 GB). On Linux, paste needs `xclip` and the dialog `zenity` (macOS has both built in); `ffprobe`/`ffmpeg` add video length and preview (optional).
 
 ### Selecting several messages
 
@@ -250,7 +327,7 @@ notify_sound = watui   # watui (own chime; calls ring) | system | off | /path/to
 
 ### Desktop notifications
 
-New messages pop up via `notify-send` (one notification per chat, updated in place). Clicking it opens that chat in watui (switching profile if needed) and brings the tmux pane and kitty window to the front. No notification for muted or archived chats — except when someone **@mentions you** or **replies to your message** there (like on the phone: "@ Sari mentioned you · Backend Team"). Also none for the chat you are reading while watui is focused, or for old messages arriving after a reconnect. A profile with notifications turned off stays fully silent. `notify = private` shows only who wrote; `:set notify=off` mutes them for the session.
+New messages pop up as desktop notifications (on Linux one per chat, updated in place). Clicking it (Linux) opens that chat in watui (switching profile if needed) and brings the tmux pane and kitty window to the front. No notification for muted or archived chats — except when someone **@mentions you** or **replies to your message** there (like on the phone: "@ Sari mentioned you · Backend Team"). Also none for the chat you are reading while watui is focused, or for old messages arriving after a reconnect. A profile with notifications turned off stays fully silent. `notify = private` shows only who wrote; `:set notify=off` mutes them for the session.
 
 Calls: watui can't answer calls (whatsmeow has no audio/video), but:
 
@@ -267,7 +344,17 @@ Change a setting while watui is running with `:set images=thumbnail` (that only 
 
 Pictures need kitty. Inside tmux they also need `set -g allow-passthrough on` in your tmux config.
 
-With vim-tmux-navigator, tmux steals `Ctrl+h`/`Ctrl+l` unless watui is in its vim pattern. Add `watui` to the pattern by rebinding `C-h`/`C-j`/`C-k`/`C-l` after the `run tpm` line (see `~/.tmux.conf`).
+With [vim-tmux-navigator](https://github.com/christoomey/vim-tmux-navigator), tmux takes `Ctrl+h/j/k/l` before watui sees them. Add `watui` to its vim pattern by putting these lines in `~/.tmux.conf` **after** the `run '~/.tmux/plugins/tpm/tpm'` line:
+
+```tmux
+is_vim="ps -o state= -o comm= -t '#{pane_tty}' | grep -iqE '^[^TXZ ]+ +(\\S+/)?g?\\.?(view|l?n?vim?x?|fzf|watui)(diff)?(-wrapped)?$'"
+bind-key -n C-h if-shell "$is_vim" "send-keys C-h" "select-pane -L"
+bind-key -n C-j if-shell "$is_vim" "send-keys C-j" "select-pane -D"
+bind-key -n C-k if-shell "$is_vim" "send-keys C-k" "select-pane -U"
+bind-key -n C-l if-shell "$is_vim" "send-keys C-l" "select-pane -R"
+```
+
+Two kitty windows on two monitors, both running tmux? Show which one has focus in the status bar: `set -g status-left "#{?#{m:*focused*,#{client_flags}},#[bg=green#,fg=black] ● #S #[default] ,#[fg=brightblack] ○ #S #[default] }"` (needs `set -g focus-events on`).
 
 ## Where things are stored
 
@@ -288,15 +375,17 @@ Saved files (`S` in the message menu) go to `~/Downloads/WhatsApp/`.
 
 Recording and sending voice notes, sending a file as a reply, searching inside messages (`/` filters chat names), playing video inside the terminal, Lottie (vector) stickers, voice/video calls, showing which message is pinned.
 
-Video and voice notes need `mpv`; `ffmpeg` grabs video frames and animates GIFs inline; ImageMagick (`convert`) animates stickers: `sudo apt install mpv ffmpeg imagemagick`. Paste and copy use `xclip`; the file dialog uses `zenity`: `sudo apt install xclip zenity`.
+Also not yet: native Windows (use WSL2, see [Platform support](#platform-support)), clickable notifications on macOS, and the clipboard on pure Wayland without XWayland (`wl-clipboard`).
 
 ## Keep it updated
 
 WhatsApp blocks old client versions, so update the library every few months:
 
 ```bash
-go get go.mau.fi/whatsmeow@latest && go mod tidy && make install
+go get go.mau.fi/whatsmeow@latest && go mod tidy && make test && make build
 ```
+
+then install `bin/watui` again (step 4 of [Install](#linux)).
 
 ## Project layout
 
@@ -306,8 +395,9 @@ internal/wa/       whatsmeow wrapper: events → local store, send/edit/delete/r
 internal/store/    SQLite message store (messages.db)
 internal/media/    picture cache and kitty graphics (Unicode placeholders, tmux passthrough, animation)
 internal/profile/  several WhatsApp accounts, each with its own client and store
-internal/notify/   desktop notifications (notify-send) and sounds
+internal/notify/   desktop notifications (notify-send on Linux, osascript on macOS) and sounds
 internal/player/   voice note / video playback via mpv
+internal/desktop/  the OS around watui: open files and links, clipboard, file dialog, raise the window, sounds (one file per OS)
 internal/config/   ~/.config/watui/config
 internal/ui/       Bubble Tea UI: panels, chat list, messages, menus, profile details, themes, vim compose editor
 scripts/           screenshots.sh (README screenshots from demo data)
@@ -316,17 +406,11 @@ scripts/           screenshots.sh (README screenshots from demo data)
 ## Development
 
 ```bash
-make test       # go test ./...
-make build      # bin/watui
-make deploy     # ~/App/WaTui/watui + ~/.local/bin/watui symlink
+make test         # go test ./...
+make build        # bin/watui
+make run          # build and start it
+make deploy       # test, build, install to $APP_DIR (default ~/App/WaTui) and link ~/.local/bin/watui
 make screenshots  # regenerate docs/screenshots from demo data
 ```
 
-Two commands:
-
-| Command | Runs |
-|---|---|
-| `watui` | the deployed build in `~/App/WaTui` (update it with `make deploy`) |
-| `watuidev` | the code in this folder, rebuilt on every start (script in `~/.local/bin/watuidev`) |
-
-Both use the same login and chats (`~/.local/share/watui`), so only one can run at a time. If one is already open, starting another shows where it is running (process, terminal, tmux window) and asks whether to close it and open here: it is asked to quit cleanly first, and forced after 5 seconds.
+A handy split: keep an installed `watui` for daily use and start the code you're working on with `make run` (or `go run ./cmd/watui`). Both use the same login and chats (`~/.local/share/watui`), so only one can run at a time. If one is already open, starting another shows where it is running (process, terminal, tmux window) and asks whether to close it and open here: it is asked to quit cleanly first, and forced after 5 seconds.
