@@ -587,11 +587,7 @@ func (m Model) editorCmd() tea.Cmd {
 	}
 	_, _ = f.WriteString(m.input.Value())
 	_ = f.Close()
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "nvim"
-	}
-	parts := strings.Fields(editor)
+	parts := editorCommand()
 	cmd := exec.Command(parts[0], append(parts[1:], f.Name())...)
 	path := f.Name()
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {

@@ -4,6 +4,12 @@ All notable changes to watui. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Fixed
+- A message marked "✗ failed" (the send timed out) now shows ✓✓ once it turns out to have arrived.
+- Messages sent within the same second keep their order after a history sync; the chat list preview matches the last message.
+- `:set theme=…` and `:set notify_sound=…` take effect right away instead of after a restart; `:set` lists both.
+- A blank `$EDITOR` no longer crashes watui (falls back to nvim).
+
 ## [v0.1.0] - 2026-11-17
 
 First release.

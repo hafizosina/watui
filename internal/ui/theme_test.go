@@ -63,3 +63,29 @@ func TestThemes(t *testing.T) {
 		t.Fatalf("unknown theme should be an error, got %v", err)
 	}
 }
+
+func TestSetThemeAppliesNow(t *testing.T) {
+	m := step(testModel(t), tea.WindowSizeMsg{Width: 110, Height: 30}, ChangedMsg{})
+	defer func() { _ = m.setTheme(DefaultTheme) }()
+	m2, _ := m.runCommand("set theme=nord")
+	m = m2.(Model)
+	if currentTheme != "nord" || m.flashErr {
+		t.Errorf(":set theme=nord should switch now, theme=%q flash=%q", currentTheme, m.flash)
+	}
+	m2, _ = m.runCommand("set theme=nope")
+	if m = m2.(Model); !m.flashErr || m.cfg.Theme != "nord" {
+		t.Errorf("an unknown theme should be an error and keep nord, got theme=%q", m.cfg.Theme)
+	}
+}
+
+func TestBlankEditor(t *testing.T) {
+	t.Setenv("EDITOR", "   ")
+	if got := editorCommand(); len(got) != 1 || got[0] != "nvim" {
+		t.Errorf("blank $EDITOR should fall back to nvim, got %q", got)
+	}
+	t.Setenv("EDITOR", "code --wait")
+	if got := editorCommand(); len(got) != 2 || got[0] != "code" {
+		t.Errorf("got %q", got)
+	}
+	_ = viewFileCmd("/tmp/x.txt") // used to panic on a blank $EDITOR
+}

@@ -248,15 +248,26 @@ func (s *Store) DeleteMessage(chatJID, id string) error {
 	return err
 }
 
+// SetStatus moves a message's ticks forward. "Failed" only replaces pending or
+// sent (a late error can't undo a delivery), and a later receipt replaces
+// "failed": the send can time out although the message arrived.
 func (s *Store) SetStatus(chatJID, id string, status Status) error {
-	_, err := s.db.Exec(`UPDATE messages SET status = ? WHERE chat_jid = ? AND id = ? AND (status < ? OR ? = ?)`,
-		status, chatJID, id, status, status, StatusFailed)
+	var err error
+	if status == StatusFailed {
+		_, err = s.db.Exec(`UPDATE messages SET status = ? WHERE chat_jid = ? AND id = ? AND status < ?`,
+			status, chatJID, id, StatusDelivered)
+	} else {
+		_, err = s.db.Exec(`UPDATE messages SET status = ? WHERE chat_jid = ? AND id = ? AND (status < ? OR status = ?)`,
+			status, chatJID, id, status, StatusFailed)
+	}
 	return err
 }
 
+// SetStatusByIDs applies a delivery / read receipt (see SetStatus).
 func (s *Store) SetStatusByIDs(ids []string, status Status) error {
 	for _, id := range ids {
-		if _, err := s.db.Exec(`UPDATE messages SET status = ? WHERE id = ? AND from_me = 1 AND status < ?`, status, id, status); err != nil {
+		if _, err := s.db.Exec(`UPDATE messages SET status = ? WHERE id = ? AND from_me = 1 AND (status < ? OR status = ?)`,
+			status, id, status, StatusFailed); err != nil {
 			return err
 		}
 	}
@@ -322,7 +333,7 @@ func (s *Store) Chats() ([]Chat, error) {
 		SELECT c.jid, c.name, c.last_ts, c.pinned, c.archived, c.muted_until, c.is_group,
 			MAX(c.sync_unread, (SELECT COUNT(*) FROM messages m WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.read = 0)),
 			(SELECT COUNT(*) FROM messages m WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.read = 0 AND m.for_me = 1),
-			COALESCE((SELECT m.deleted || '|' || m.text FROM messages m WHERE m.chat_jid = c.jid ORDER BY m.ts DESC LIMIT 1), '')
+			COALESCE((SELECT m.deleted || '|' || m.text FROM messages m WHERE m.chat_jid = c.jid ORDER BY m.ts DESC, m.rowid DESC LIMIT 1), '')
 		FROM chats c
 		WHERE c.last_ts > 0
 		ORDER BY c.pinned DESC, c.last_ts DESC`)
@@ -484,7 +495,7 @@ func (s *Store) MarkForMe(mentions []string, quoteSender string) error {
 func (s *Store) LastMessage(jid string) (Message, bool, error) {
 	m := Message{ChatJID: jid}
 	var ts int64
-	err := s.db.QueryRow(`SELECT id, sender_jid, from_me, ts FROM messages WHERE chat_jid = ? ORDER BY ts DESC LIMIT 1`, jid).
+	err := s.db.QueryRow(`SELECT id, sender_jid, from_me, ts FROM messages WHERE chat_jid = ? ORDER BY ts DESC, rowid DESC LIMIT 1`, jid).
 		Scan(&m.ID, &m.SenderJID, &m.FromMe, &ts)
 	if err == sql.ErrNoRows {
 		return m, false, nil

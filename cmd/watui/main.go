@@ -179,8 +179,8 @@ func run() error {
 		}
 		prog.Send(ui.OpenChatMsg{Profile: name, JID: jid})
 	})
-	if cache, err := os.UserCacheDir(); err == nil {
-		notifier.SetSound(cfg.NotifySound, filepath.Join(cache, "watui", "sounds"))
+	if dir := notify.SoundDir(); dir != "" {
+		notifier.SetSound(cfg.NotifySound, dir)
 	}
 	watch := func(p *profile.Profile) {
 		name := p.Name

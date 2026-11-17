@@ -378,6 +378,41 @@ func (c *Client) isGroupAdmin(ctx context.Context, group types.JID, info types.M
 	return false
 }
 
+// historyOldestFirst parses a conversation's history and orders it oldest
+// first, so messages are stored (and tie-broken by rowid) in the order they
+// were sent — even several within the same second: WhatsApp's MsgOrderID
+// breaks the tie, else its own list order (which is newest first).
+func (c *Client) historyOldestFirst(chat types.JID, msgs []*waHistorySync.HistorySyncMsg) []*events.Message {
+	type item struct {
+		evt   *events.Message
+		order uint64
+		idx   int
+	}
+	var items []item
+	for i, hm := range msgs {
+		evt, err := c.WA.ParseWebMessage(chat, hm.GetMessage())
+		if err != nil {
+			continue
+		}
+		items = append(items, item{evt, hm.GetMsgOrderID(), i})
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		a, b := items[i], items[j]
+		if !a.evt.Info.Timestamp.Equal(b.evt.Info.Timestamp) {
+			return a.evt.Info.Timestamp.Before(b.evt.Info.Timestamp)
+		}
+		if a.order != b.order {
+			return a.order < b.order
+		}
+		return a.idx > b.idx
+	})
+	out := make([]*events.Message, len(items))
+	for i, it := range items {
+		out[i] = it.evt
+	}
+	return out
+}
+
 func (c *Client) onHistorySync(ctx context.Context, data *waHistorySync.HistorySync) {
 	for _, pn := range data.GetPushnames() {
 		if c.WA.Store.Contacts == nil {
@@ -416,21 +451,16 @@ func (c *Client) onHistorySync(ctx context.Context, data *waHistorySync.HistoryS
 			c.check(c.Store.TouchChat(chat.String(), time.Unix(int64(ts), 0)))
 		}
 
-		var parsed []*events.Message
-		for _, hm := range conv.GetMessages() {
-			evt, err := c.WA.ParseWebMessage(raw, hm.GetMessage())
-			if err != nil {
-				continue
-			}
-			parsed = append(parsed, evt)
-		}
-		sort.Slice(parsed, func(i, j int) bool { return parsed[i].Info.Timestamp.After(parsed[j].Info.Timestamp) })
-		unread := int(conv.GetUnreadCount())
-		var unreadIDs []string
+		parsed := c.historyOldestFirst(raw, conv.GetMessages())
 		for _, evt := range parsed {
 			c.onMessage(ctx, evt, true)
-			if !evt.Info.IsFromMe && len(unreadIDs) < unread {
-				unreadIDs = append(unreadIDs, evt.Info.ID)
+		}
+		// the newest incoming messages are the unread ones
+		unread := int(conv.GetUnreadCount())
+		var unreadIDs []string
+		for i := len(parsed) - 1; i >= 0 && len(unreadIDs) < unread; i-- {
+			if !parsed[i].Info.IsFromMe {
+				unreadIDs = append(unreadIDs, parsed[i].Info.ID)
 			}
 		}
 		if unread > 0 {

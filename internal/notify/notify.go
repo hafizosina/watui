@@ -3,6 +3,7 @@ package notify
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 
 	"github.com/hafizosina/watui/internal/desktop"
@@ -54,6 +55,15 @@ func (n *Notifier) SetSound(mode, cacheDir string) {
 	default:
 		n.messageSound, n.callSound = mode, mode
 	}
+}
+
+// SoundDir is where SetSound keeps the generated "watui" sounds.
+func SoundDir() string {
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(cache, "watui", "sounds")
 }
 
 func New(onOpen func(key, action string)) *Notifier {

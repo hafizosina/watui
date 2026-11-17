@@ -600,13 +600,18 @@ func isTextFile(name string) bool {
 	return textExts[strings.ToLower(filepath.Ext(name))]
 }
 
-func viewFileCmd(path string) tea.Cmd {
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "nvim"
+// editorCommand is $EDITOR split into program and arguments, nvim when it is
+// unset or blank (a blank one used to crash watui).
+func editorCommand() []string {
+	if parts := strings.Fields(os.Getenv("EDITOR")); len(parts) > 0 {
+		return parts
 	}
-	parts := strings.Fields(editor)
-	args := parts[1:]
+	return []string{"nvim"}
+}
+
+func viewFileCmd(path string) tea.Cmd {
+	parts := editorCommand()
+	args := append([]string(nil), parts[1:]...)
 	if strings.Contains(parts[0], "vi") {
 		args = append(args, "-R")
 	}

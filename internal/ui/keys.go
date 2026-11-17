@@ -9,6 +9,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/hafizosina/watui/internal/notify"
 )
 
 func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -581,12 +583,25 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 		_, arg, _ := strings.Cut(cmd, " ")
 		arg = strings.TrimSpace(arg)
 		if arg == "" {
-			m.setFlash(fmt.Sprintf("images=%s image_width=%d image_height=%d collapse_lines=%d notify=%s show_deleted=%s", m.cfg.Images, m.cfg.ImageWidth, m.cfg.ImageHeight, m.cfg.CollapseLines, m.cfg.Notify, onOff(m.cfg.ShowDeleted)), false)
+			m.setFlash(fmt.Sprintf("images=%s image_width=%d image_height=%d collapse_lines=%d notify=%s notify_sound=%s show_deleted=%s theme=%s", m.cfg.Images, m.cfg.ImageWidth, m.cfg.ImageHeight, m.cfg.CollapseLines, m.cfg.Notify, m.cfg.NotifySound, onOff(m.cfg.ShowDeleted), currentTheme), false)
 			return m, nil
 		}
 		if err := m.cfg.Set(arg); err != nil {
 			m.setFlash(err.Error(), true)
 			return m, nil
+		}
+		// settings read only at startup: apply them now too
+		switch key, _, _ := strings.Cut(arg, "="); strings.TrimSpace(key) {
+		case "theme":
+			if err := m.setTheme(m.cfg.Theme); err != nil {
+				m.cfg.Theme = currentTheme // keep the theme that is actually showing
+				m.setFlash(err.Error(), true)
+				return m, nil
+			}
+		case "notify_sound":
+			if m.opts.Notifier != nil {
+				m.opts.Notifier.SetSound(m.cfg.NotifySound, notify.SoundDir())
+			}
 		}
 		if m.images != nil {
 			m.images.Reset()
