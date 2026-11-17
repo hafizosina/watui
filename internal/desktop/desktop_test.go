@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFileList(t *testing.T) {
@@ -23,5 +24,22 @@ func TestFileList(t *testing.T) {
 		if got := FileList(text); got != nil {
 			t.Errorf("%q should be plain text, got %q", text, got)
 		}
+	}
+}
+
+// xclip -i forks a child that holds the clipboard (and our pipes) until
+// something else is copied; waiting for it froze Compose on dd.
+func TestRunDoesNotWaitForForkedChild(t *testing.T) {
+	start := time.Now()
+	if err := run(2*time.Second, "hello", "sh", "-c", "cat >/dev/null; sleep 5 & exit 0"); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("run waited %v for a background child", d)
+	}
+	start = time.Now()
+	_, _ = output(2*time.Second, "", "sh", "-c", "sleep 5 & echo hi")
+	if d := time.Since(start); d > 1500*time.Millisecond {
+		t.Errorf("output waited %v for a background child", d)
 	}
 }

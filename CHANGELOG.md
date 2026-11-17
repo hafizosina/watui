@@ -8,6 +8,7 @@ All notable changes to watui. Versions follow [Semantic Versioning](https://semv
 - Search the open chat: `/` in the messages pane searches its whole history; `Enter` jumps to the nearest match above, `n` / `N` older / newer, matches highlighted, the title shows "3 of 12"; `Esc` clears.
 
 ### Fixed
+- `dd`, `x` and other deletes or yanks in Compose froze watui on Linux (copying to the clipboard waited for xclip's background process); `y` Copy text in the message menu had the same wait in the background. Introduced in v0.1.0.
 - A message marked "✗ failed" (the send timed out) now shows ✓✓ once it turns out to have arrived.
 - Messages sent within the same second keep their order after a history sync; the chat list preview matches the last message.
 - `:set theme=…` and `:set notify_sound=…` take effect right away instead of after a restart; `:set` lists both.

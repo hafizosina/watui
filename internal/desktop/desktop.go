@@ -87,14 +87,31 @@ func FileList(s string) []string {
 	return out
 }
 
-func output(timeout time.Duration, stdin string, name string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+func command(ctx context.Context, stdin string, name string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, name, args...)
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
-	return cmd.Output()
+	// a tool may leave a background child holding our pipes (xclip does, to
+	// serve the clipboard): don't wait for it past the timeout
+	cmd.WaitDelay = 500 * time.Millisecond
+	return cmd
+}
+
+// output runs a tool and returns what it printed.
+func output(timeout time.Duration, stdin string, name string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return command(ctx, stdin, name, args...).Output()
+}
+
+// run runs a tool without reading its output. Use it for tools that fork a
+// background child (xclip -i): reading stdout would wait for that child,
+// which lives until something else is copied — that froze Compose on dd.
+func run(timeout time.Duration, stdin string, name string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return command(ctx, stdin, name, args...).Run()
 }
 
 func has(name string) bool {

@@ -16,8 +16,7 @@ func openCommand(target string) (string, []string) { return "open", []string{tar
 
 // CopyText puts text on the clipboard.
 func CopyText(text string) error {
-	_, err := output(2*time.Second, text, "pbcopy")
-	return err
+	return run(2*time.Second, text, "pbcopy")
 }
 
 // pasteboardJS reads copied Finder files or a copied picture from the

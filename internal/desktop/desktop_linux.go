@@ -18,8 +18,7 @@ func CopyText(text string) error {
 	if !has("xclip") {
 		return errors.New("copy needs xclip (sudo apt install xclip)")
 	}
-	_, err := output(2*time.Second, text, "xclip", "-selection", "clipboard", "-i")
-	return err
+	return run(2*time.Second, text, "xclip", "-selection", "clipboard", "-i")
 }
 
 func xclipOut(target string) ([]byte, error) {
