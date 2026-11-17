@@ -219,7 +219,7 @@ func (c *Client) onMessage(ctx context.Context, e *events.Message, history bool)
 		return
 	}
 	if pm := e.Message.GetProtocolMessage(); pm != nil {
-		c.onProtocol(ctx, chat, pm)
+		c.onProtocol(ctx, chat, e.Info, pm)
 		return
 	}
 	if r := e.Message.GetReactionMessage(); r != nil {
@@ -308,16 +308,74 @@ func webStatus(s waWeb.WebMessageInfo_Status) store.Status {
 	}
 }
 
-func (c *Client) onProtocol(ctx context.Context, chat types.JID, p *waE2E.ProtocolMessage) {
+func (c *Client) onProtocol(ctx context.Context, chat types.JID, info types.MessageInfo, p *waE2E.ProtocolMessage) {
 	id := p.GetKey().GetID()
 	switch p.GetType() {
 	case waE2E.ProtocolMessage_REVOKE:
-		c.check(c.Store.DeleteMessage(chat.String(), id))
+		if c.mayChange(ctx, chat, id, info, true) {
+			c.check(c.Store.DeleteMessage(chat.String(), id))
+		}
 	case waE2E.ProtocolMessage_MESSAGE_EDIT:
-		if text := messageText(p.GetEditedMessage()); text != "" {
+		if text := messageText(p.GetEditedMessage()); text != "" && c.mayChange(ctx, chat, id, info, false) {
 			c.check(c.Store.EditMessage(chat.String(), id, text))
 		}
 	}
+}
+
+// mayChange reports whether the sender of an edit / delete is allowed to touch
+// message id: only its author may edit it; a group admin may also delete it.
+// Without this any chat member could rewrite anyone's messages in watui.
+func (c *Client) mayChange(ctx context.Context, chat types.JID, id string, info types.MessageInfo, isDelete bool) bool {
+	author, fromMe, ok, err := c.Store.Author(chat.String(), id)
+	if err != nil || !ok {
+		return false // nothing stored to change
+	}
+	if fromMe || info.IsFromMe {
+		return fromMe && info.IsFromMe // our own messages: only our own devices
+	}
+	if c.sameUser(ctx, author, info) {
+		return true
+	}
+	if isDelete && chat.Server == types.GroupServer {
+		return c.isGroupAdmin(ctx, chat, info)
+	}
+	c.log.Warnf("ignored %s of %s in %s by %s: not the author", map[bool]string{true: "delete", false: "edit"}[isDelete], id, chat, info.Sender)
+	return false
+}
+
+// sameUser compares a stored sender with the sender of an incoming message,
+// trying both its phone-number and LID forms.
+func (c *Client) sameUser(ctx context.Context, stored string, info types.MessageInfo) bool {
+	for _, j := range []types.JID{info.Sender, info.SenderAlt} {
+		if j.IsEmpty() {
+			continue
+		}
+		if c.normalize(ctx, j).String() == stored || j.ToNonAD().String() == stored {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Client) isGroupAdmin(ctx context.Context, group types.JID, info types.MessageInfo) bool {
+	g, err := c.WA.GetGroupInfo(ctx, group)
+	if err != nil {
+		return false
+	}
+	for _, p := range g.Participants {
+		if !p.IsAdmin && !p.IsSuperAdmin {
+			continue
+		}
+		for _, j := range []types.JID{p.JID, p.PhoneNumber, p.LID} {
+			if j.IsEmpty() {
+				continue
+			}
+			if c.sameUser(ctx, c.normalize(ctx, j).String(), info) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (c *Client) onHistorySync(ctx context.Context, data *waHistorySync.HistorySync) {

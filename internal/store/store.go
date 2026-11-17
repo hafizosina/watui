@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 )
@@ -225,6 +226,15 @@ func (s *Store) PutMessage(m Message) error {
 		return err
 	}
 	return s.TouchChat(m.ChatJID, m.TS)
+}
+
+// Author says who wrote a stored message; ok is false when it isn't stored.
+func (s *Store) Author(chatJID, id string) (senderJID string, fromMe, ok bool, err error) {
+	err = s.db.QueryRow(`SELECT sender_jid, from_me FROM messages WHERE chat_jid = ? AND id = ?`, chatJID, id).Scan(&senderJID, &fromMe)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, false, nil
+	}
+	return senderJID, fromMe, err == nil, err
 }
 
 func (s *Store) EditMessage(chatJID, id, text string) error {

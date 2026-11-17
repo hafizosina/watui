@@ -133,7 +133,7 @@ func (m *Model) openGroupPicker(selected map[string]bool, order []string, filter
 		if n == "" {
 			n = "+" + strings.Split(j, "@")[0]
 		}
-		names = append(names, n)
+		names = append(names, sanitize(n))
 	}
 	mn.title = "New group · enter toggles · type to search"
 	if len(names) > 0 {

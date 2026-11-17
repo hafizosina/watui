@@ -52,11 +52,22 @@ func trimLink(s string) string {
 
 func openLinkCmd(link string) tea.Cmd {
 	return func() tea.Msg {
-		if err := exec.Command("xdg-open", link).Start(); err != nil {
+		if err := xdgOpen(link); err != nil {
 			return actionDoneMsg{err: fmt.Errorf("open link: %w", err)}
 		}
 		return actionDoneMsg{info: "opened " + ansi.Truncate(link, 60, "…")}
 	}
+}
+
+// xdgOpen opens a file or URL with the desktop default app and reaps the
+// process when it exits, so no zombies pile up.
+func xdgOpen(target string) error {
+	cmd := exec.Command("xdg-open", target)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
 }
 
 func (m *Model) openLinksMenu(links []string) {

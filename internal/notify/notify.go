@@ -98,7 +98,8 @@ func (n *Notifier) Send(note Note) {
 	if id != 0 {
 		args = append(args, "--replace-id="+strconv.FormatUint(uint64(id), 10))
 	}
-	args = append(args, note.Title, note.Body)
+	// "--": a title or body starting with "-" must not be read as an option
+	args = append(args, "--", note.Title, note.Body)
 
 	go func() {
 		cmd := exec.Command("notify-send", args...)

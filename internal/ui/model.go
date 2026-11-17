@@ -197,7 +197,7 @@ func tick() tea.Cmd {
 }
 
 func (m *Model) setFlash(text string, isErr bool) {
-	m.flash = text
+	m.flash = strings.ReplaceAll(sanitize(text), "\n", " ") // may hold file or contact names
 	m.flashErr = isErr
 	m.flashUntil = time.Now().Add(4 * time.Second)
 	if isErr {

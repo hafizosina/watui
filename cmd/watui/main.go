@@ -182,9 +182,11 @@ func run() error {
 			}
 		})
 		go func() {
+			// show a change at once, then merge whatever arrives in the next 150 ms
+			// into one follow-up refresh (Changed holds at most one pending signal)
 			for range p.WA.Changed() {
-				time.Sleep(150 * time.Millisecond)
 				prog.Send(ui.ChangedMsg{Profile: name})
+				time.Sleep(150 * time.Millisecond)
 			}
 		}()
 	}

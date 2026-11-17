@@ -57,3 +57,12 @@ func TestMultiSelect(t *testing.T) {
 		t.Fatal("esc should clear the selection and stay in the messages")
 	}
 }
+
+func TestMenuFilterSpace(t *testing.T) {
+	m := step(testModel(t), tea.WindowSizeMsg{Width: 110, Height: 30}, ChangedMsg{})
+	m.menu = &menu{title: "x", filterable: true}
+	m = step(m, key("budi"), tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}}, key("s"))
+	if m.menu.filter != "budi s" {
+		t.Errorf("space should type one space, got %q", m.menu.filter)
+	}
+}

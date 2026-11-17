@@ -519,6 +519,14 @@ func reactionLine(reactions map[string]string) string {
 	counts := map[string]int{}
 	var order []string
 	for _, emoji := range reactions {
+		// a reaction is whatever text the sender put there: strip escapes and cap it
+		emoji = strings.ReplaceAll(sanitize(emoji), "\n", " ")
+		if r := []rune(emoji); len(r) > 16 {
+			emoji = string(r[:16])
+		}
+		if emoji == "" {
+			continue
+		}
 		if counts[emoji] == 0 {
 			order = append(order, emoji)
 		}

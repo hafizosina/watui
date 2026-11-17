@@ -104,10 +104,11 @@ func (m Model) menuKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				mn.filter = string(r[:len(r)-1])
 				mn.cursor = 0
 			}
-		case k.Type == tea.KeyRunes || key == " ":
-			mn.filter += string(k.Runes)
-			if key == " " {
+		case k.Type == tea.KeyRunes || k.Type == tea.KeySpace:
+			if k.Type == tea.KeySpace {
 				mn.filter += " "
+			} else {
+				mn.filter += string(k.Runes)
 			}
 			mn.cursor = 0
 		}
@@ -348,7 +349,7 @@ func (m *Model) openMessageMenu() {
 				if err != nil {
 					return err
 				}
-				return exec.Command("xdg-open", path).Start()
+				return xdgOpen(path)
 			})
 		}})
 		if isTextFile(client.FileName(msg.ChatJID, msg.ID)) {
@@ -407,7 +408,7 @@ func (m *Model) openMessageMenu() {
 				if err != nil {
 					return err
 				}
-				return exec.Command("xdg-open", path).Start()
+				return xdgOpen(path)
 			})
 		}})
 	}
