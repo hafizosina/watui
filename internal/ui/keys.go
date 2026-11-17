@@ -20,11 +20,11 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.stickers != nil {
 		return m.stickerKey(k.String())
 	}
-	if k.String() == "ctrl+t" && m.focus == focusChat && m.info == nil && m.mode != modeCommand && m.mode != modeSearch {
+	if k.String() == "ctrl+t" && m.focus == focusChat && m.info == nil && m.mode != modeCommand && m.mode != modeSearch && m.mode != modeMsgSearch {
 		m.openStickers()
 		return m, nil
 	}
-	if k.String() == "ctrl+x" && m.ringing != nil && m.mode != modeCommand && m.mode != modeSearch {
+	if k.String() == "ctrl+x" && m.ringing != nil && m.mode != modeCommand && m.mode != modeSearch && m.mode != modeMsgSearch {
 		return m.declineCall(m.ringing.profile, m.ringing.ev.CallID)
 	}
 	if m.mode == modeNormal || m.mode == modeInsert {
@@ -84,6 +84,8 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.insertKey(k)
 	case modeCommand, modeSearch:
 		return m.promptKey(k)
+	case modeMsgSearch:
+		return m.msgSearchKey(k)
 	}
 	if m.showHelp {
 		m.showHelp = false
@@ -242,6 +244,10 @@ func (m Model) normalKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.prompt.Focus()
 		return m, nil
 	case "/":
+		if m.focus == focusChat && m.openJID != "" && m.info == nil {
+			m.startMsgSearch()
+			return m, nil
+		}
 		m.mode = modeSearch
 		m.focus = focusList
 		m.prompt.SetValue(m.filter)
@@ -381,6 +387,10 @@ func (m Model) chatKey(key string) (tea.Model, tea.Cmd) {
 		}
 	case "u":
 		return m, m.openFilePicker()
+	case "n", "N":
+		if m.msgSearch != "" {
+			m.stepHit(key == "n")
+		}
 	case "v":
 		m.toggleMark()
 	case "V":
@@ -398,6 +408,10 @@ func (m Model) chatKey(key string) (tea.Model, tea.Cmd) {
 		if m.replyTo != nil || m.editing != nil {
 			m.replyTo, m.editing = nil, nil
 			m.input.Reset()
+			return m, nil
+		}
+		if m.msgSearch != "" {
+			m.clearMsgSearch()
 			return m, nil
 		}
 		m.focus = focusList

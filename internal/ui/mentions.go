@@ -199,6 +199,12 @@ func (m Model) mentionView(query string, list []wa.Mentionable) (string, int, in
 
 // highlightMentions colors the "@Name" marks in one plain line: yours magenta, others blue.
 func highlightMentions(line string, marks []string) string {
+	return highlightLine(line, marks, "")
+}
+
+// highlightLine colors @mentions and, when searching, the matches of query
+// (case-insensitive) in one plain line.
+func highlightLine(line string, marks []string, query string) string {
 	var b strings.Builder
 	for line != "" {
 		at, mark := -1, ""
@@ -206,6 +212,15 @@ func highlightMentions(line string, marks []string) string {
 			if j := strings.Index(line, mk); j >= 0 && (at < 0 || j < at || j == at && len(mk) > len(mark)) {
 				at, mark = j, mk
 			}
+		}
+		if spans := matchSpans(line, query); len(spans) > 0 && (at < 0 || spans[0][0] < at) {
+			at = spans[0][0]
+			if at > 0 {
+				b.WriteString(styleText.Render(line[:at]))
+			}
+			b.WriteString(styleSearchHit.Render(line[at:spans[0][1]]))
+			line = line[spans[0][1]:]
+			continue
 		}
 		if at < 0 {
 			b.WriteString(styleText.Render(line))

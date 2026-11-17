@@ -145,10 +145,11 @@ func (m Model) messagesTitle() string {
 	if m.openJID == "" {
 		return "[3] Messages"
 	}
+	title := "[3] Messages" // who it is shows in the header above
 	if n := len(m.selection()); n > 0 {
-		return fmt.Sprintf("[3] Messages · %d selected", n)
+		title += fmt.Sprintf(" · %d selected", n)
 	}
-	return "[3] Messages" // who it is shows in the header above
+	return title + m.searchTitle()
 }
 
 func (m Model) messagesFooter() string {
@@ -484,9 +485,9 @@ func (m Model) blockKey(msg store.Message, newGroup bool, w, replies int) string
 		reactions = append(reactions, who+"="+e)
 	}
 	sort.Strings(reactions)
-	return fmt.Sprintf("%d|%t|%s|%d|%t|%t|%t|%t|%s|%s|%s|%s|%d|%t|%s|%s",
+	return fmt.Sprintf("%d|%t|%s|%d|%t|%t|%t|%t|%s|%s|%s|%s|%d|%t|%s|%s|%s",
 		w, newGroup, m.withNames(msg.Text), msg.Status, msg.Edited, msg.Deleted, msg.Starred, msg.Forwarded,
-		msg.QuoteID, m.withNames(msg.QuoteText), strings.Join(reactions, ","), msg.MediaType, replies, m.expanded[msg.ID], img, msg.SenderName)
+		msg.QuoteID, m.withNames(msg.QuoteText), strings.Join(reactions, ","), msg.MediaType, replies, m.expanded[msg.ID], img, msg.SenderName, m.msgSearch)
 }
 
 // bubble frames one message: others get a bar in their color on the left,
@@ -717,12 +718,16 @@ func (m Model) renderText(msg store.Message, text string, w int, marks ...string
 		return ""
 	}
 	body := styleText.Width(max(10, w-4)).Render(text)
-	if len(marks) > 0 && !strings.Contains(text, "\x1b") {
+	query := m.msgSearch
+	if query != "" && len(matchSpans(text, query)) == 0 {
+		query = ""
+	}
+	if (len(marks) > 0 || query != "") && !strings.Contains(text, "\x1b") {
 		wrapped := strings.Split(lipgloss.NewStyle().Width(max(10, w-4)).Render(text), "\n")
 		for i, l := range wrapped {
 			// the wrap pads lines with spaces; trim them like the plain path does, or your own
 			// (right-aligned) messages get pushed left and overflow the pane
-			wrapped[i] = highlightMentions(strings.TrimRight(l, " "), marks)
+			wrapped[i] = highlightLine(strings.TrimRight(l, " "), marks, query)
 		}
 		body = strings.Join(wrapped, "\n")
 	}
@@ -765,6 +770,8 @@ func (m Model) bottomLine() string {
 		return styleKey.Render(":") + m.prompt.View()
 	case modeSearch:
 		return styleKey.Render("/") + m.prompt.View()
+	case modeMsgSearch:
+		return styleKey.Render("/") + m.prompt.View() + styleDim.Render("  search this chat · enter finds the nearest match above · esc cancels")
 	}
 	if banner, ok := m.ringBanner(); ok {
 		b := lipgloss.NewStyle().Background(colRed).Foreground(colOnAccent).Bold(true)
@@ -810,6 +817,9 @@ func (m Model) hintPairs() [][2]string {
 	if m.hasSelection() {
 		return [][2]string{{"Mark", "v"}, {"Range", "V"}, {"Actions", "space"}, {"Clear", "esc"}}
 	}
+	if m.msgSearch != "" {
+		return [][2]string{{"Older match", "n"}, {"Newer match", "N"}, {"New search", "/"}, {"Menu", "space"}, {"Clear search", "esc"}}
+	}
 	return [][2]string{{"Select", "j/k"}, {"Menu", "space"}, {"Multi-select", "v/V"}, {"Paste", "p"}, {"Upload", "u"}, {"Large compose", "ctrl+g"}, {"Write", "i"}, {"Editor", "e"}, {"Back", "q"}, {"Next/prev chat", "J/K"}, {"Keybindings", "?"}}
 }
 
@@ -840,6 +850,7 @@ func helpView(w int) string {
 		{"ctrl+d / ctrl+u", "jump 10 messages"},
 		{"gg / G", "oldest loaded (again: load older) / newest"},
 		{"space", "message menu (with messages marked: bulk menu)"},
+		{"/  n / N", "search this chat · next older / newer match · esc clears"},
 		{"v / V", "mark / unmark message · start / keep a range (j/k extend)"},
 		{"i / a / enter", "start typing"},
 		{"e", "write the message in $EDITOR"},

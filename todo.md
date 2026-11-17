@@ -1,12 +1,13 @@
 # watui todo
 
 ## Open
-- search inside messages (`/` only filters chat names; no way to find a message in a chat)
+- search all chats at once (`/` in the messages pane searches the open chat)
 - record and send voice notes
 - send a file / picture as a reply (attaching now cancels the reply)
 - README screenshots for the new features: multi-select, attachments in Compose, large Compose (`make screenshots`)
 
 ## Done
+- [x] search the open chat: `/` in the messages pane, `n` / `N`, highlighted matches, whole history
 - [x] proper releases: v0.1.0, MIT license, CHANGELOG, release workflow (`make release V=…`), module path github.com/hafizosina/watui
 - [x] macOS port (builds and passes tests on macOS in CI) — 1843606
 - [x] calls show in the chat (answered / declined / missed) + ringing banner, ctrl+x decline — 50060a3

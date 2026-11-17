@@ -166,7 +166,7 @@ A header above the messages shows who the open chat is with: avatar, name, pin/m
 | | `Ctrl+d` / `Ctrl+u` | half page |
 | | `Enter` | open chat |
 | | `i` | open chat and type |
-| | `/` | search chats |
+| | `/` | search chats by name |
 | | `A` | show archived chats (or `Enter` on the ** Archived (N)** row at the top; **← Back to chats** returns) |
 | | `n` | new chat / new group (also `:new`) |
 | | `p` | open the highlighted chat and paste a copied picture, file or text into it |
@@ -174,6 +174,7 @@ A header above the messages shows who the open chat is with: avatar, name, pin/m
 | NORMAL (messages) | `j` / `k` | select next / previous message |
 | | `Ctrl+d` / `Ctrl+u`, `gg` / `G` | jump (a chat opens with its newest 200 messages; `k` or `gg` at the top loads older ones) |
 | | `Space` | message menu (like right-click); with messages marked, the bulk menu |
+| | `/` then `n` / `N` | search this chat's messages (whole history): `Enter` jumps to the nearest match above, `n` older, `N` newer, matches highlighted, `Esc` clears |
 | | `v` / `V` | mark a message · start / keep a range (see [Selecting several messages](#selecting-several-messages)) |
 | | `p` | paste a copied picture, file or text (see [Sending files and pictures](#sending-files-and-pictures)) |
 | | `u` | pick files to send (file dialog) |
@@ -389,7 +390,7 @@ Saved files (`S` in the message menu) go to `~/Downloads/WhatsApp/`.
 
 ## Not supported yet
 
-Recording and sending voice notes, sending a file as a reply, searching inside messages (`/` filters chat names), playing video inside the terminal, Lottie (vector) stickers, voice/video calls, showing which message is pinned.
+Recording and sending voice notes, sending a file as a reply, searching all chats at once (`/` searches the open chat), playing video inside the terminal, Lottie (vector) stickers, voice/video calls, showing which message is pinned.
 
 Also not yet: native Windows (use WSL2, see [Platform support](#platform-support)), clickable notifications on macOS, and the clipboard on pure Wayland without XWayland (`wl-clipboard`).
 

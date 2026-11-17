@@ -27,6 +27,7 @@ const (
 	modeInsert
 	modeCommand
 	modeSearch
+	modeMsgSearch // / in the messages pane: search the open chat
 )
 
 func (m mode) String() string {
@@ -35,7 +36,7 @@ func (m mode) String() string {
 		return "INSERT"
 	case modeCommand:
 		return "COMMAND"
-	case modeSearch:
+	case modeSearch, modeMsgSearch:
 		return "SEARCH"
 	}
 	return "NORMAL"
@@ -130,6 +131,9 @@ type Model struct {
 	rangeFrom      string                   // V range anchor (message ID), "" when off
 	attach         []attachment             // files waiting in Compose
 	composeBig     bool                     // ctrl+g: Compose takes most of the chat column
+	msgSearch      string                   // / in the messages pane: the query, "" when off
+	msgHits        []store.Hit              // its matches, oldest first
+	msgHit         int                      // the one shown, index into msgHits
 	foldable       map[string]bool
 
 	vp         viewport.Model
@@ -496,6 +500,7 @@ func (m *Model) open(jid string) {
 		m.replyTo, m.editing = nil, nil
 		m.marked, m.markedMsgs, m.rangeFrom = map[string]bool{}, map[string]store.Message{}, ""
 		m.clearAttachments()
+		m.msgSearch, m.msgHits, m.msgHit = "", nil, -1
 	}
 	if m.opts.Notifier != nil {
 		if p := m.activeProfile(); p != nil {

@@ -452,6 +452,45 @@ func (s *Store) RecentMedia(kind string, limit int) ([]Message, error) {
 	return out, rows.Err()
 }
 
+// Hit is a message that matched a search.
+type Hit struct {
+	ID string
+	TS time.Time
+}
+
+// SearchMessages finds messages in one chat whose text contains query
+// (case-insensitive for ASCII), oldest first. Deleted ones count only when
+// withDeleted is set (show_deleted keeps showing them).
+func (s *Store) SearchMessages(chatJID, query string, withDeleted bool) ([]Hit, error) {
+	esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
+	rows, err := s.db.Query(`SELECT id, ts FROM messages
+		WHERE chat_jid = ? AND text LIKE '%' || ? || '%' ESCAPE '\' AND (deleted = 0 OR ?)
+		ORDER BY ts ASC, rowid ASC LIMIT 2000`, chatJID, esc, withDeleted)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Hit
+	for rows.Next() {
+		var h Hit
+		var ts int64
+		if err := rows.Scan(&h.ID, &ts); err != nil {
+			return nil, err
+		}
+		h.TS = time.Unix(ts, 0)
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+// CountSince counts a chat's messages at or after ts: how many to load so a
+// message from ts is on screen.
+func (s *Store) CountSince(chatJID string, ts time.Time) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE chat_jid = ? AND ts >= ?`, chatJID, ts.Unix()).Scan(&n)
+	return n, err
+}
+
 func (s *Store) CountMessages(jid string) (int, error) {
 	var n int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE chat_jid = ?`, jid).Scan(&n)

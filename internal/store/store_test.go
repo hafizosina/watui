@@ -2,6 +2,8 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,5 +67,40 @@ func TestStatusTicks(t *testing.T) {
 	_ = s.SetStatus(chat, "retry", StatusRead)
 	if got := status("retry"); got != StatusRead {
 		t.Errorf("read should clear failed, got %v", got)
+	}
+}
+
+func TestSearchMessages(t *testing.T) {
+	s := testStore(t)
+	const chat = "628111@s.whatsapp.net"
+	now := time.Now()
+	for i, text := range []string{"100% done", "a_b", "Deploy DONE", "nope"} {
+		if err := s.PutMessage(Message{ChatJID: chat, ID: fmt.Sprint(i), TS: now.Add(time.Duration(i) * time.Second), Text: text}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = s.DeleteMessage(chat, "2")
+	ids := func(q string, withDeleted bool) string {
+		hits, err := s.SearchMessages(chat, q, withDeleted)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, h := range hits {
+			out = append(out, h.ID)
+		}
+		return strings.Join(out, ",")
+	}
+	if got := ids("done", true); got != "0,2" {
+		t.Errorf("case-insensitive, oldest first: got %q", got)
+	}
+	if got := ids("done", false); got != "0" {
+		t.Errorf("deleted hidden: got %q", got)
+	}
+	if got := ids("%", true); got != "0" {
+		t.Errorf("%% must be literal: got %q", got)
+	}
+	if got := ids("_", true); got != "1" {
+		t.Errorf("_ must be literal: got %q", got)
 	}
 }

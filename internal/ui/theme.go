@@ -61,6 +61,7 @@ var (
 	styleBorder, styleBorderOn, styleTitle, styleDim, styleText, styleName lipgloss.Style
 	styleUnreadName, styleBadge, styleBadgeMuted, styleSelected, styleMe   lipgloss.Style
 	styleBadgeForMe, styleMention, styleMentionMe                          lipgloss.Style
+	styleSearchHit                                                         lipgloss.Style
 	styleDay, styleDeleted, styleRead, styleFailed, styleError, styleInfo  lipgloss.Style
 	styleStatusBar, styleKey, styleMuted                                   lipgloss.Style
 )
@@ -174,7 +175,8 @@ func ApplyTheme(t Theme) {
 	styleBadgeMuted = lipgloss.NewStyle().Foreground(colOnAccent).Background(colComment).Bold(true)
 	styleBadgeForMe = lipgloss.NewStyle().Foreground(colOnAccent).Background(colMagenta).Bold(true)
 	styleMention = lipgloss.NewStyle().Foreground(colBlue).Bold(true)
-	styleMentionMe = lipgloss.NewStyle().Foreground(colMagenta).Bold(true) // same color as the @ badge
+	styleMentionMe = lipgloss.NewStyle().Foreground(colMagenta).Bold(true)             // same color as the @ badge
+	styleSearchHit = lipgloss.NewStyle().Foreground(colOnAccent).Background(colYellow) // like vim's search highlight
 	styleSelected = lipgloss.NewStyle().Background(colHighlight)
 	styleMe = lipgloss.NewStyle().Foreground(colBlue).Bold(true)
 	styleDay = lipgloss.NewStyle().Foreground(colComment)
@@ -201,7 +203,7 @@ func modeStyle(m mode) lipgloss.Style {
 		return base.Background(colGreen)
 	case modeCommand:
 		return base.Background(colYellow)
-	case modeSearch:
+	case modeSearch, modeMsgSearch:
 		return base.Background(colMagenta)
 	}
 	return base.Background(colBlue)
