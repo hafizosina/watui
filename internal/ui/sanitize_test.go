@@ -15,7 +15,7 @@ func TestSanitize(t *testing.T) {
 		"ayah۝1":             "ayah1",
 		"zero​width":         "zerowidth",
 		"\ufeffbom":          "bom",
-		"👨‍👩‍👧":              "👨‍👩‍👧",
+		"👨‍👩‍👧":              "👨👩👧",
 		"اللَّهُ":            "اللَّهُ",
 	}
 	for in, want := range cases {

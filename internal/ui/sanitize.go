@@ -7,6 +7,9 @@ import (
 	"github.com/hafizosina/watui/internal/store"
 )
 
+// sanitize makes text safe and width-predictable for the screen. Zero-width
+// joiners go too (they're Cf): tmux draws "👩‍👩‍👧‍👦" as four 2-wide emoji while
+// lipgloss counts one, so a joined emoji pushed rows past their box border.
 func sanitize(s string) string {
 	if s == "" {
 		return s
@@ -19,8 +22,6 @@ func sanitize(s string) string {
 			b.WriteRune(r)
 		case r == '\t':
 			b.WriteString("    ")
-		case r == '‍':
-			b.WriteRune(r)
 		case r < 0x20, r == 0x7f, r >= 0x80 && r < 0xa0:
 		case unicode.Is(unicode.Cf, r):
 		case unicode.Is(unicode.Co, r):
