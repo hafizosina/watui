@@ -203,7 +203,7 @@ A header above the messages shows who the open chat is with: avatar, name, pin/m
 | NORMAL | `h j k l w b e 0 ^ $ gg G` move · `i a I A o O` insert · `x X dd D dw de diw daw` delete · `cw ce ciw cc C s S` change · `yy Y yiw p P` yank/paste · `u` / `Ctrl+r` undo/redo · `J` join · `~` case · `r` replace · `v` / `V` visual · `Esc` leaves Compose |
 | VISUAL / V-LINE | move to extend · `d` / `x` delete · `y` yank · `c` change · `~ u U` case · `o` other end · `p` replace with yank · `Esc` back |
 
-**Clipboard:** Compose shares the system clipboard, like vim's `clipboard=unnamedplus`. What you yank or delete (`yy`, `dd`, `dw`, `x`, visual `y`, …) can be pasted into other apps, and `p`/`P` paste whatever was copied last — in watui or elsewhere (Sublime, browser…). Your own line yank still pastes as a line. A copied picture or file is attached instead. Note that `x` also replaces the clipboard, so paste text copied elsewhere before fixing typos.
+**Clipboard:** Compose shares the system clipboard. What you **yank** (`yy`, `yw`, visual `y`, …) can be pasted into other apps, and `p`/`P` paste whatever was copied last — in watui or elsewhere (Sublime, browser…). Your own line yank still pastes as a line. A copied picture or file is attached instead. Deleting (`dd`, `x`, `dw`, `cw`, visual `d`, …) only deletes: it never touches the clipboard, so text you copied elsewhere stays ready to paste.
 
 ### Profile details
 

@@ -4,6 +4,9 @@ All notable changes to watui. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Changed
+- Deleting in Compose (`dd`, `x`, `dw`, `cw`, visual `d`, …) no longer copies the text: it doesn't touch the clipboard, and `p` doesn't paste it back. Only yanks copy.
+
 ## [v0.1.1] - 2026-11-17
 
 ### Added

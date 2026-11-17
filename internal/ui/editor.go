@@ -493,8 +493,10 @@ func (e *editor) operate(op string, from, to int, line bool) {
 	if from > to {
 		from, to = to, from
 	}
-	e.yank(from, to, line)
 	if op == "y" {
+		// only yanks are kept (and go to the system clipboard); deletes and
+		// changes just delete, like vim's "_ black-hole register
+		e.yank(from, to, line)
 		e.cur = from
 		e.clampNormal()
 		return

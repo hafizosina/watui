@@ -129,3 +129,33 @@ func hasRow(view, text string) bool {
 	}
 	return false
 }
+
+func TestDeletesDontCopy(t *testing.T) {
+	var clipped []string
+	for _, keys := range [][]string{{"dd"}, {"x"}, {"d", "w"}, {"D"}, {"c", "w", "esc"}, {"v", "l", "d"}, {"V", "x"}, {"s", "esc"}} {
+		e := newEditor()
+		e.SetWidth(40)
+		e.clip = func(s string) { clipped = append(clipped, s) }
+		e.SetValue("halo bro\nbesok")
+		e.cur = 0
+		e.Focus(vimNormal)
+		for _, k := range keysOf(keys...) {
+			e.HandleKey(k)
+		}
+		if len(e.register) != 0 || len(clipped) != 0 {
+			t.Errorf("%v: delete should not copy, register=%q clipboard=%q", keys, string(e.register), clipped)
+		}
+		clipped = nil
+	}
+	e := newEditor()
+	e.clip = func(s string) { clipped = append(clipped, s) }
+	e.SetValue("halo")
+	e.cur = 0
+	e.Focus(vimNormal)
+	for _, k := range keysOf("y", "y") {
+		e.HandleKey(k)
+	}
+	if len(clipped) != 1 || clipped[0] != "halo" {
+		t.Errorf("yy should still copy, got %q", clipped)
+	}
+}
