@@ -4,6 +4,8 @@ All notable changes to watui. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+## [v0.1.1] - 2026-11-17
+
 ### Added
 - Search the open chat: `/` in the messages pane searches its whole history; `Enter` jumps to the nearest match above, `n` / `N` older / newer, matches highlighted, the title shows "3 of 12"; `Esc` clears.
 
@@ -48,5 +50,6 @@ First release.
 - Text from WhatsApp is cleaned before display (no terminal escape sequences).
 - Only a message's author can edit it; the author or a group admin can delete it.
 
-[Unreleased]: https://github.com/hafizosina/watui/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/hafizosina/watui/compare/v0.1.1...HEAD
+[v0.1.1]: https://github.com/hafizosina/watui/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/hafizosina/watui/releases/tag/v0.1.0
