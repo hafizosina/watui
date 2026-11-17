@@ -10,8 +10,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/zhenzhu/watui/internal/store"
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/store"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
 // Multi-select: v toggles the selected message, V starts a range that follows

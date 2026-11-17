@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
-	"github.com/zhenzhu/watui/internal/store"
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/store"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
 func TestMentionQuery(t *testing.T) {

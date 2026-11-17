@@ -9,8 +9,8 @@ import (
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/zhenzhu/watui/internal/store"
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/store"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
 func TestStickerPicker(t *testing.T) {

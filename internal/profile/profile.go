@@ -23,9 +23,9 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/zhenzhu/watui/internal/media"
-	"github.com/zhenzhu/watui/internal/store"
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/media"
+	"github.com/hafizosina/watui/internal/store"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
 const Default = "default"

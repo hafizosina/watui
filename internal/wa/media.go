@@ -22,7 +22,7 @@ import (
 	_ "golang.org/x/image/webp"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/zhenzhu/watui/internal/media"
+	"github.com/hafizosina/watui/internal/media"
 )
 
 const (

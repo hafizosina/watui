@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/zhenzhu/watui/internal/store"
+	"github.com/hafizosina/watui/internal/store"
 )
 
 func sanitize(s string) string {

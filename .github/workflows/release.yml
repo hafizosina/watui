@@ -1,0 +1,86 @@
+name: release
+
+# Push a tag like v0.1.0 (after adding its section to CHANGELOG.md) to publish
+# a GitHub Release with ready-built binaries. `make release V=v0.1.0` does it.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # SQLite needs cgo, so each target builds on its own kind of machine.
+          # Ubuntu 22.04 keeps the Linux binaries working on older distros (glibc 2.35+).
+          - runner: ubuntu-22.04
+            target: linux_amd64
+          - runner: ubuntu-22.04-arm
+            target: linux_arm64
+          - runner: macos-latest
+            target: macos_arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        env:
+          CGO_ENABLED: "1"
+        run: go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o watui ./cmd/watui
+
+      - name: Check the version is built in
+        run: ./watui version | grep -qx "watui ${GITHUB_REF_NAME}"
+
+      - name: Package
+        run: |
+          name="watui_${GITHUB_REF_NAME}_${{ matrix.target }}"
+          mkdir "$name"
+          cp watui README.md LICENSE CHANGELOG.md "$name/"
+          tar -czf "$name.tar.gz" "$name"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: watui_*.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: cd dist && sha256sum watui_*.tar.gz > checksums.txt && cat checksums.txt
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v tag="$GITHUB_REF_NAME" '
+            /^## \[/ { if (on) exit; on = index($0, "## [" tag "]") == 1; next }
+            /^\[[^]]+\]: / { if (on) exit }
+            on' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "CHANGELOG.md has no section for $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          cat notes.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "watui $GITHUB_REF_NAME" --notes-file notes.md

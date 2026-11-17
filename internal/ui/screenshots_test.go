@@ -22,10 +22,10 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	waLog "go.mau.fi/whatsmeow/util/log"
 
-	"github.com/zhenzhu/watui/internal/config"
-	"github.com/zhenzhu/watui/internal/profile"
-	"github.com/zhenzhu/watui/internal/store"
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/config"
+	"github.com/hafizosina/watui/internal/profile"
+	"github.com/hafizosina/watui/internal/store"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
 const shotW, shotH = 150, 42

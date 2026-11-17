@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/zhenzhu/watui/internal/desktop"
+	"github.com/hafizosina/watui/internal/desktop"
 	"net"
 	"os"
 	"os/exec"

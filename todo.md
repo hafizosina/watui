@@ -5,9 +5,10 @@
 - record and send voice notes
 - send a file / picture as a reply (attaching now cancels the reply)
 - README screenshots for the new features: multi-select, attachments in Compose, large Compose (`make screenshots`)
-- push to GitHub: main is 7 commits ahead of origin (767e897 … 204accd)
 
 ## Done
+- [x] proper releases: v0.1.0, MIT license, CHANGELOG, release workflow (`make release V=…`), module path github.com/hafizosina/watui
+- [x] macOS port (builds and passes tests on macOS in CI) — 1843606
 - [x] calls show in the chat (answered / declined / missed) + ringing banner, ctrl+x decline — 50060a3
 - [x] send emoji (`:emoji` popup) and stickers (ctrl+t) — 50060a3
 - [x] voice note pause (leader o) froze watui — fixed in 50060a3

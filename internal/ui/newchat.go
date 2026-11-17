@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
 type newChatMsg struct {

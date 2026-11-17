@@ -19,10 +19,10 @@ import (
 
 	"go.mau.fi/whatsmeow/types"
 
-	"github.com/zhenzhu/watui/internal/config"
-	"github.com/zhenzhu/watui/internal/profile"
-	"github.com/zhenzhu/watui/internal/store"
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/config"
+	"github.com/hafizosina/watui/internal/profile"
+	"github.com/hafizosina/watui/internal/store"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
 func testModel(t *testing.T) Model {

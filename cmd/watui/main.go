@@ -6,21 +6,34 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/zhenzhu/watui/internal/config"
-	"github.com/zhenzhu/watui/internal/notify"
-	"github.com/zhenzhu/watui/internal/player"
-	"github.com/zhenzhu/watui/internal/profile"
-	"github.com/zhenzhu/watui/internal/store"
-	"github.com/zhenzhu/watui/internal/ui"
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/config"
+	"github.com/hafizosina/watui/internal/notify"
+	"github.com/hafizosina/watui/internal/player"
+	"github.com/hafizosina/watui/internal/profile"
+	"github.com/hafizosina/watui/internal/store"
+	"github.com/hafizosina/watui/internal/ui"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
+// version is set at build time (-X main.version=v0.1.0, see Makefile and the
+// release workflow). `go install …@v0.1.0` doesn't set it, so fall back to the
+// module version Go records in the binary.
 var version = "dev"
+
+func init() {
+	if version != "dev" {
+		return
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		version = info.Main.Version
+	}
+}
 
 const usage = `watui — WhatsApp in the terminal, vim style
 

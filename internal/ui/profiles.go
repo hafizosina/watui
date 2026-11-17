@@ -14,10 +14,10 @@ import (
 	"github.com/muesli/cancelreader"
 	"golang.org/x/sys/unix"
 
-	"github.com/zhenzhu/watui/internal/media"
-	"github.com/zhenzhu/watui/internal/notify"
-	"github.com/zhenzhu/watui/internal/profile"
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/media"
+	"github.com/hafizosina/watui/internal/notify"
+	"github.com/hafizosina/watui/internal/profile"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
 type Options struct {

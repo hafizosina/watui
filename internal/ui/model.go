@@ -12,12 +12,12 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/zhenzhu/watui/internal/config"
-	"github.com/zhenzhu/watui/internal/media"
-	"github.com/zhenzhu/watui/internal/player"
-	"github.com/zhenzhu/watui/internal/profile"
-	"github.com/zhenzhu/watui/internal/store"
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/config"
+	"github.com/hafizosina/watui/internal/media"
+	"github.com/hafizosina/watui/internal/player"
+	"github.com/hafizosina/watui/internal/profile"
+	"github.com/hafizosina/watui/internal/store"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
 type mode int

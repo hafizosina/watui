@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/zhenzhu/watui/internal/desktop"
+	"github.com/hafizosina/watui/internal/desktop"
 )
 
 const sampleRate = 44100

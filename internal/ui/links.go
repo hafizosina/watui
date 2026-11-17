@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/zhenzhu/watui/internal/desktop"
+	"github.com/hafizosina/watui/internal/desktop"
 )
 
 var linkRe = regexp.MustCompile(`(?i)\b(?:https?://|www\.)[^\s<>"]+`)

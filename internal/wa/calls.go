@@ -8,7 +8,7 @@ import (
 	waBinary "go.mau.fi/whatsmeow/binary"
 	"go.mau.fi/whatsmeow/types"
 
-	"github.com/zhenzhu/watui/internal/store"
+	"github.com/hafizosina/watui/internal/store"
 )
 
 type CallKind int

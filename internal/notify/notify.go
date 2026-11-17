@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/zhenzhu/watui/internal/desktop"
+	"github.com/hafizosina/watui/internal/desktop"
 )
 
 type Action struct {

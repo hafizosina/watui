@@ -29,7 +29,23 @@ Rendered from demo data (`make screenshots`). Pictures, stickers and GIFs are dr
 
 ## Install
 
+### Download a release
+
+[Releases](https://github.com/hafizosina/watui/releases) have ready-built binaries for Linux (x86-64, ARM64) and macOS (Apple Silicon). Download the `.tar.gz` for your machine, then:
+
+```bash
+tar -xzf watui_v0.1.0_linux_amd64.tar.gz
+install -m755 watui_v0.1.0_linux_amd64/watui ~/.local/bin/watui   # or anywhere on your PATH
+watui version
+```
+
+Check the download against `checksums.txt` with `sha256sum -c checksums.txt --ignore-missing`. On macOS the binary isn't signed: if it's blocked, run `xattr -d com.apple.quarantine watui` once. You still want the optional tools below (Linux) or kitty and mpv (macOS) for pictures and playback.
+
+With Go and a C compiler you can also install a release straight from source: `go install github.com/hafizosina/watui/cmd/watui@latest`.
+
 ### Linux
+
+To build it yourself:
 
 **1. Build tools:** Go **1.26+** ([go.dev/dl](https://go.dev/dl/) — distro packages are often older) and a C compiler (SQLite is built with cgo).
 
@@ -413,4 +429,18 @@ make deploy       # test, build, install to $APP_DIR (default ~/App/WaTui) and l
 make screenshots  # regenerate docs/screenshots from demo data
 ```
 
+### Releases and versions
+
+Versions follow [Semantic Versioning](https://semver.org) — `v0.y.z` while keys and settings may still change. Every change worth knowing goes in [CHANGELOG.md](CHANGELOG.md) under **Unreleased**. To release:
+
+1. Rename **Unreleased** in `CHANGELOG.md` to `## [v0.1.1] - YYYY-MM-DD` (and add a fresh empty **Unreleased** above it), then commit.
+2. `make release V=v0.1.1` — checks you're on a clean `main`, the CHANGELOG has the section and the tests pass, then tags and pushes.
+3. GitHub builds Linux and macOS binaries, runs the tests on each, and publishes the release with the CHANGELOG section as its notes (`.github/workflows/release.yml`).
+
+`watui version` shows the version: `v0.1.0` for a release, `v0.1.0-3-gabc1234` for a build 3 commits after it, `-dirty` with uncommitted changes.
+
 A handy split: keep an installed `watui` for daily use and start the code you're working on with `make run` (or `go run ./cmd/watui`). Both use the same login and chats (`~/.local/share/watui`), so only one can run at a time. If one is already open, starting another shows where it is running (process, terminal, tmux window) and asks whether to close it and open here: it is asked to quit cleanly first, and forced after 5 seconds.
+
+## License
+
+[MIT](LICENSE)

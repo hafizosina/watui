@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
 type membersMsg struct {

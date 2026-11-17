@@ -11,8 +11,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/zhenzhu/watui/internal/media"
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/media"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
 type infoState struct {

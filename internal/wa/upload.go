@@ -19,7 +19,7 @@ import (
 	"golang.org/x/image/draw"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/zhenzhu/watui/internal/store"
+	"github.com/hafizosina/watui/internal/store"
 )
 
 // MaxUpload is WhatsApp's limit for a document; media kinds are smaller.

@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/zhenzhu/watui/internal/store"
+	"github.com/hafizosina/watui/internal/store"
 )
 
 func (m *Model) openChatMenu() {

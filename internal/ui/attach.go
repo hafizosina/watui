@@ -10,8 +10,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/zhenzhu/watui/internal/desktop"
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/desktop"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
 // Attachments: p (messages pane) or ctrl+v (Compose) pastes a copied file or

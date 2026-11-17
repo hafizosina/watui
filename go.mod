@@ -1,4 +1,4 @@
-module github.com/zhenzhu/watui
+module github.com/hafizosina/watui
 
 go 1.26.0
 

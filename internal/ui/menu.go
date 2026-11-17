@@ -14,11 +14,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/zhenzhu/watui/internal/desktop"
-	"github.com/zhenzhu/watui/internal/media"
-	"github.com/zhenzhu/watui/internal/player"
-	"github.com/zhenzhu/watui/internal/store"
-	"github.com/zhenzhu/watui/internal/wa"
+	"github.com/hafizosina/watui/internal/desktop"
+	"github.com/hafizosina/watui/internal/media"
+	"github.com/hafizosina/watui/internal/player"
+	"github.com/hafizosina/watui/internal/store"
+	"github.com/hafizosina/watui/internal/wa"
 )
 
 type menuItem struct {

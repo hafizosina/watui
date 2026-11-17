@@ -10,7 +10,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/zhenzhu/watui/internal/store"
+	"github.com/hafizosina/watui/internal/store"
 )
 
 func TestOnlyAuthorsEditOrDelete(t *testing.T) {
