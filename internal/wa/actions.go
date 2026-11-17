@@ -79,7 +79,9 @@ func (c *Client) sendAndStore(ctx context.Context, chatJID string, content *waE2
 		return err
 	}
 	local.ChatJID = chatJID
-	local.ID = c.WA.GenerateMessageID()
+	if local.ID == "" {
+		local.ID = c.WA.GenerateMessageID()
+	}
 	local.SenderJID = c.ownJID().String()
 	local.FromMe = true
 	local.TS = time.Now()

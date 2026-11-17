@@ -95,6 +95,8 @@ A header above the messages shows who the open chat is with: avatar, name, pin/m
 
 ### Compose is a small vim
 
+**Large Compose:** `Ctrl+G` (from Compose or Messages) or `:big` makes Compose take about two thirds of the chat column — handy for writing and re-reading a long message; the messages above stay visible. `Ctrl+G` again shrinks it back. It stays large across chats until you turn it off.
+
 | Mode | Keys |
 |---|---|
 | INSERT | type; `Enter` new line; `Esc` or `jk` → NORMAL; `Ctrl+w` delete word; `Ctrl+u` delete to line start |
@@ -160,7 +162,7 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 | View in nvim | `v` | text/code documents (.py .go .sql .json .md .csv …), read-only; `:q` returns |
 | Save to ~/Downloads/WhatsApp | `S` | pictures, videos, voice notes, stickers, documents (original file name, never overwrites) |
 | Show / Hide image | `v` | shows pictures that are hidden (older than the newest 40, or `images=off`/`thumbnail`) |
-| Open image in viewer | `o` | opens the downloaded picture with `xdg-open` |
+| Open image in viewer | `o` | pictures and stickers: downloads the original once (not the thumbnail shown in the chat), opens it with `xdg-open` |
 | Open link | `l` | messages with http(s)/www links: opens in the default browser (`xdg-open`); several links → pick one with `1`–`9` |
 | Copy text | `y` | via `xclip` |
 | Forward | `f` | type to search a chat, `Enter` to send |
@@ -168,6 +170,13 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 | Pin | `p` | 24 hours, 7 days or 30 days, or unpin |
 | Delete for everyone | `d` | your own messages, first 2 days; asks first |
 | Message info | `I` | your message: when sent, delivered and read (group: who read it and when, who only got it, how many are still waiting; `▶ played` for voice notes). Someone else's: when they sent it, when it reached this computer, when you read it. Updates live; `j`/`k` scroll, `Esc` back |
+
+### Sending files and pictures
+
+- **Paste** — copy a picture (screenshot tool, browser *Copy image*) or one or more files (`Ctrl+C` in Nemo/Nautilus, or a copied path), then press `p` — in the messages pane, in the chat list (opens the highlighted chat first) or in Compose's vim normal mode — or `Ctrl+V` while typing. Copied text goes into Compose instead (in Compose, `p` still pastes what you yanked there first).
+- **Upload** — `u` in the messages pane opens the file dialog (zenity, pick several with `Ctrl`/`Shift`), or type `:upload ~/path/to/file.pdf`.
+
+The files wait in Compose (its title shows `📎 2 files: …`): type a caption if you like (it goes with the first file) and press `Ctrl+S`. `Esc` in the messages pane drops them. JPEG/PNG pictures, MP4 videos and MP3/OGG/M4A audio up to 16 MB go as media; everything else, and anything bigger, as a document (up to 2 GB). Needs `xclip` for paste, `zenity` for the dialog, and `ffprobe`/`ffmpeg` for video length and preview (optional).
 
 ### Selecting several messages
 
@@ -191,6 +200,7 @@ While typing after `:`, a popup suggests commands (with a short description) and
 | `:profile <name>` · `:profile add <name>` · `:profile rename <name> <label>` | switch, add or rename a profile |
 | `:theme [name]` | theme picker, or switch directly |
 | `:sticker` | send a recent sticker |
+| `:upload [path…]` | send files; no path opens the file dialog |
 | `:pin` `:unpin` · `:mute` `:unmute` · `:archive` `:unarchive` | the open chat |
 | `:archived` | show / hide archived chats |
 | `:read` | mark the open chat read |

@@ -160,6 +160,8 @@ func (m Model) messagesFooter() string {
 
 func (m Model) composeTitle() string {
 	switch {
+	case len(m.attach) > 0:
+		return m.attachTitle()
 	case m.editing != nil:
 		return "[4] Editing message · esc in normal mode cancels"
 	case m.replyTo != nil:
@@ -168,6 +170,9 @@ func (m Model) composeTitle() string {
 			who = m.wa.ContactName(m.replyTo.SenderJID, m.replyTo.SenderName)
 		}
 		return "[4] Replying to " + sanitize(who) + ": " + strings.ReplaceAll(sanitize(m.withNames(m.replyTo.Text)), "\n", " ")
+	}
+	if m.composeBig {
+		return "[4] Compose · large · ctrl+g smaller"
 	}
 	return "[4] Compose"
 }
@@ -192,7 +197,7 @@ func (m Model) composeFooter() string {
 		if m.input.pending != "" {
 			return m.input.pending + "…"
 		}
-		return "NORMAL · i insert · v visual · ctrl+s send · esc leave"
+		return "NORMAL · i insert · v visual · ctrl+g large · ctrl+s send · esc leave"
 	case vimVisual, vimVisualLine:
 		return m.input.mode.String() + " · d delete · y yank · c change · esc"
 	}
@@ -781,11 +786,11 @@ func (m Model) hintPairs() [][2]string {
 	case m.mode == modeInsert:
 		switch m.input.mode {
 		case vimNormal:
-			return [][2]string{{"Send", "ctrl+s"}, {"Insert", "i a o"}, {"Visual", "v V"}, {"Delete", "x dd dw"}, {"Change", "cw ciw"}, {"Undo", "u"}, {"Leave", "esc"}}
+			return [][2]string{{"Send", "ctrl+s"}, {"Insert", "i a o"}, {"Visual", "v V"}, {"Delete", "x dd dw"}, {"Change", "cw ciw"}, {"Paste", "p"}, {"Undo", "u"}, {"Large", "ctrl+g"}, {"Leave", "esc"}}
 		case vimVisual, vimVisualLine:
-			return [][2]string{{"Delete", "d"}, {"Yank", "y"}, {"Change", "c"}, {"Case", "~ u U"}, {"Swap end", "o"}, {"Cancel", "esc"}}
+			return [][2]string{{"Delete", "d"}, {"Yank", "y"}, {"Change", "c"}, {"Case", "~ u U"}, {"Swap end", "o"}, {"Large", "ctrl+g"}, {"Cancel", "esc"}}
 		}
-		return [][2]string{{"Send", "ctrl+s"}, {"Newline", "enter"}, {"Normal", "esc / jk"}, {"Editor", "ctrl+e"}}
+		return [][2]string{{"Send", "ctrl+s"}, {"Newline", "enter"}, {"Normal", "esc / jk"}, {"Paste file", "ctrl+v"}, {"Large", "ctrl+g"}, {"Editor", "ctrl+e"}}
 	case m.focus == focusProfiles:
 		return [][2]string{{"Profiles", "enter"}, {"Actions", "space"}, {"Add", "a"}, {"Next/prev profile", "gt/gT"}, {"Chats", "^j"}}
 	case m.focus == focusList:
@@ -797,7 +802,7 @@ func (m Model) hintPairs() [][2]string {
 	if m.hasSelection() {
 		return [][2]string{{"Mark", "v"}, {"Range", "V"}, {"Actions", "space"}, {"Clear", "esc"}}
 	}
-	return [][2]string{{"Select", "j/k"}, {"Menu", "space"}, {"Multi-select", "v/V"}, {"Write", "i"}, {"Editor", "e"}, {"Back", "q"}, {"Next/prev chat", "J/K"}, {"Keybindings", "?"}}
+	return [][2]string{{"Select", "j/k"}, {"Menu", "space"}, {"Multi-select", "v/V"}, {"Paste", "p"}, {"Upload", "u"}, {"Large compose", "ctrl+g"}, {"Write", "i"}, {"Editor", "e"}, {"Back", "q"}, {"Next/prev chat", "J/K"}, {"Keybindings", "?"}}
 }
 
 func hints(pairs [][2]string) string {
@@ -819,6 +824,7 @@ func helpView(w int) string {
 		{"/", "search chats (esc clears)"},
 		{"A", "toggle archived chats"},
 		{"n", "new chat / new group (search contacts or type a number)"},
+		{"p", "open the chat and paste a copied file / picture / text into it"},
 		{"space", "chat menu: info, pin, mute, archive, read/unread, delete, leave"},
 		{"", ""},
 		{"", "Messages"},
@@ -829,6 +835,9 @@ func helpView(w int) string {
 		{"v / V", "mark / unmark message · start / keep a range (j/k extend)"},
 		{"i / a / enter", "start typing"},
 		{"e", "write the message in $EDITOR"},
+		{"p", "paste: copied file(s) or picture → attach (text → Compose)"},
+		{"u", "upload: pick files to send (file dialog; :upload <path> also works)"},
+		{"esc", "drop attachments / cancel reply"},
 		{"q / esc", "back to chats"},
 		{"", ""},
 		{"", "Message menu"},
@@ -860,12 +869,14 @@ func helpView(w int) string {
 		{"h j k l w b e 0 ^ $ gg G", "move"},
 		{"i a I A o O", "insert"},
 		{"x X dd D dw diw cw ciw cc C s S", "delete / change"},
-		{"yy Y yiw p P", "yank / paste"},
+		{"yy Y yiw p P", "yank / paste (p: copied file or picture → attach; nothing yanked → clipboard text)"},
 		{"u ctrl+r J ~ r", "undo / redo / join / case / replace"},
 		{"v V", "visual / visual line (d y c ~ o)"},
 		{"@name", "mention a group member (tab/enter picks)"},
 		{":name", "emoji (tab inserts)"},
 		{"ctrl+e", "edit in $EDITOR"},
+		{"ctrl+g", "large Compose on / off (also :big; works from Messages too)"},
+		{"ctrl+v", "paste a copied file or picture as an attachment"},
 		{"", ""},
 		{"", "Commands"},
 		{":pin  :unpin", "pin chat"},
@@ -876,6 +887,8 @@ func helpView(w int) string {
 		{":new", "new chat / new group"},
 		{":info  :me", "open chat's details / your profile"},
 		{":sticker", "send a recent sticker"},
+		{":upload [path…]", "send files (no path: file dialog)"},
+		{":big", "large Compose on / off (ctrl+g)"},
 		{":set images=off", "always | thumbnail | off"},
 		{":set", "show settings"},
 		{":read", "mark chat read"},

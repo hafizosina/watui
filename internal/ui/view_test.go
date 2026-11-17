@@ -637,3 +637,24 @@ func TestHeaderShowsWhoTheChatIsWith(t *testing.T) {
 		t.Errorf("DM header:\n%s", head)
 	}
 }
+
+func TestBigCompose(t *testing.T) {
+	const w, h = 110, 30
+	m := step(testModel(t), tea.WindowSizeMsg{Width: w, Height: h}, ChangedMsg{})
+	m = step(m, key("enter"), key("i"))
+	small, vpSmall := m.composeH(), m.vp.Height
+	m = step(m, tea.KeyMsg{Type: tea.KeyCtrlG})
+	if !m.composeBig || m.composeH() <= small*2 || m.vp.Height >= vpSmall {
+		t.Fatalf("ctrl+g should grow Compose: compose %d→%d, messages %d→%d", small, m.composeH(), vpSmall, m.vp.Height)
+	}
+	if m.vp.Height < 4 {
+		t.Errorf("messages should keep a few lines, got %d", m.vp.Height)
+	}
+	checkFrame(t, m.View(), w, h)
+	m = step(m, tea.WindowSizeMsg{Width: w, Height: 50})
+	checkFrame(t, m.View(), w, 50)
+	m = step(m, tea.KeyMsg{Type: tea.KeyCtrlG})
+	if m.composeBig || m.composeH() != small {
+		t.Errorf("ctrl+g again should shrink back to %d, got %d", small, m.composeH())
+	}
+}

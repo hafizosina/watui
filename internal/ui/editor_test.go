@@ -1,9 +1,12 @@
 package ui
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func keysOf(seq ...string) []tea.KeyMsg {
@@ -96,4 +99,33 @@ func TestEditorModes(t *testing.T) {
 	if e.mode != vimNormal {
 		t.Fatal("esc in visual should go back to normal")
 	}
+}
+
+func TestEditorGrowShowsEarlierLines(t *testing.T) {
+	e := newEditor()
+	e.SetWidth(40)
+	e.Focus(vimInsert)
+	var lines []string
+	for i := 1; i <= 10; i++ {
+		lines = append(lines, fmt.Sprintf("line %d", i))
+	}
+	e.SetValue(strings.Join(lines, "\n"))
+	e.CursorEnd()
+	if v := ansi.Strip(e.View()); hasRow(v, "line 1") || !hasRow(v, "line 10") {
+		t.Fatalf("3-line box should show the end:\n%s", v)
+	}
+	e.SetHeight(14)
+	v := ansi.Strip(e.View())
+	if !hasRow(v, "line 1") || !hasRow(v, "line 10") {
+		t.Errorf("a taller box should show every line, top included:\n%s", v)
+	}
+}
+
+func hasRow(view, text string) bool {
+	for _, row := range strings.Split(view, "\n") {
+		if strings.TrimRight(strings.TrimSpace(row), "▏") == text {
+			return true
+		}
+	}
+	return false
 }

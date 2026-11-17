@@ -396,11 +396,20 @@ func (m *Model) openMessageMenu() {
 				return nil
 			}})
 		}
-		if path := m.images.Path(msg.ID); path != "" && (msg.MediaType == wa.MediaImage || msg.MediaType == wa.MediaSticker) {
-			items = append(items, menuItem{label: "Open image in viewer", key: "o", run: func(m *Model) tea.Cmd {
-				return runDetached("xdg-open", path)
-			}})
-		}
+	}
+	if (msg.MediaType == wa.MediaImage || msg.MediaType == wa.MediaSticker) && !m.gone(msg) {
+		// the original from WhatsApp, not the thumbnail / resized copy drawn in the terminal
+		client := m.wa
+		items = append(items, menuItem{label: "Open image in viewer", key: "o", run: func(m *Model) tea.Cmd {
+			m.setFlash("downloading image…", false)
+			return m.actionCmd("", func(ctx context.Context) error {
+				path, _, err := client.MediaFile(ctx, msg.ChatJID, msg.ID)
+				if err != nil {
+					return err
+				}
+				return exec.Command("xdg-open", path).Start()
+			})
+		}})
 	}
 	if msg.MediaType == "" && !m.gone(msg) && isMediaText(msg.Text) {
 		items = append(items, menuItem{label: "Media not available (old message)", key: "v", run: func(m *Model) tea.Cmd {
@@ -570,15 +579,6 @@ func copyCmd(text string) tea.Cmd {
 			return actionDoneMsg{err: fmt.Errorf("copy: %w", err)}
 		}
 		return actionDoneMsg{info: "copied"}
-	}
-}
-
-func runDetached(name string, args ...string) tea.Cmd {
-	return func() tea.Msg {
-		if err := exec.Command(name, args...).Start(); err != nil {
-			return actionDoneMsg{err: err}
-		}
-		return nil
 	}
 }
 

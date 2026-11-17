@@ -128,6 +128,8 @@ type Model struct {
 	marked         map[string]bool          // multi-select, by message ID
 	markedMsgs     map[string]store.Message // the marked messages themselves
 	rangeFrom      string                   // V range anchor (message ID), "" when off
+	attach         []attachment             // files waiting in Compose
+	composeBig     bool                     // ctrl+g: Compose takes most of the chat column
 	foldable       map[string]bool
 
 	vp         viewport.Model
@@ -152,6 +154,7 @@ func New(profiles []*profile.Profile, cfg config.Config, pl *player.Player, opts
 
 func newModel(client *wa.Client, cfg config.Config, images *media.Manager, pl *player.Player) Model {
 	in := newEditor()
+	in.clip = func(text string) { clipboardWriter(text) }
 
 	pr := textinput.New()
 	pr.Prompt = ""
@@ -284,6 +287,16 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case membersMsg:
 		return m.gotMembers(msg)
+	case clipboardMsg:
+		return m.gotClipboard(msg)
+	case filesPickedMsg:
+		if msg.err != nil {
+			m.setFlash(msg.err.Error(), true)
+			return m, nil
+		}
+		m.flash = ""
+		m.addAttachments(msg.files)
+		return m, nil
 	case editorDoneMsg:
 		if msg.err != nil {
 			m.setFlash("editor: "+msg.err.Error(), true)
@@ -301,10 +314,28 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) layout() {
 	chatW := m.width - m.listWidth()
+	m.input.SetHeight(m.composeInnerH())
 	m.vp.Width = chatW - 2
 	m.vp.Height = max(1, m.mainH()-m.composeH()-headerH-2)
 	m.input.SetWidth(chatW - 2)
 	m.prompt.Width = m.width - 2
+}
+
+// composeInnerH is the text area of Compose: 3 lines, or about two thirds of
+// the chat column in large mode (the messages above keep a few lines).
+func (m Model) composeInnerH() int {
+	if !m.composeBig {
+		return 3
+	}
+	avail := m.mainH() - headerH
+	return max(3, min(avail*2/3, avail-8)-2)
+}
+
+func (m *Model) toggleBigCompose() {
+	m.composeBig = !m.composeBig
+	m.layout()
+	m.renderMessages(false)
+	m.revealSelection()
 }
 
 func (m Model) listWidth() int {
@@ -464,6 +495,7 @@ func (m *Model) open(jid string) {
 		m.input.Reset()
 		m.replyTo, m.editing = nil, nil
 		m.marked, m.markedMsgs, m.rangeFrom = map[string]bool{}, map[string]store.Message{}, ""
+		m.clearAttachments()
 	}
 	if m.opts.Notifier != nil {
 		if p := m.activeProfile(); p != nil {

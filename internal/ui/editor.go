@@ -56,6 +56,7 @@ type editor struct {
 	pending  string
 	register []rune
 	regLine  bool
+	clip     func(string) // also puts yanks / deletes on the system clipboard (vim's unnamedplus)
 	undo     []snapshot
 	redo     []snapshot
 
@@ -174,6 +175,7 @@ func newEditor() *editor {
 
 func (e *editor) Value() string      { return e.expand(func(a atom) string { return a.label }) }
 func (e *editor) Height() int        { return e.height }
+func (e *editor) SetHeight(h int)    { e.height = max(1, h) }
 func (e *editor) SetWidth(w int)     { e.width = max(4, w) }
 func (e *editor) Focus(mode vimMode) { e.focused, e.mode = true, mode }
 func (e *editor) Blur()              { e.focused = false; e.pending = "" }
@@ -471,6 +473,9 @@ func (e *editor) yank(from, to int, line bool) {
 	if from < to {
 		e.register = append([]rune(nil), e.buf[from:to]...)
 		e.regLine = line
+		if e.clip != nil {
+			e.clip(string(e.register))
+		}
 	}
 }
 
@@ -861,6 +866,9 @@ func (e *editor) View() string {
 	if cursorRow >= e.scroll+h {
 		e.scroll = cursorRow - h + 1
 	}
+	// don't leave empty rows at the bottom while text above is hidden (e.g. after
+	// ctrl+g makes Compose taller): fill the box from the bottom up
+	e.scroll = max(0, min(e.scroll, len(rows)-h))
 	var out []string
 	for ri := e.scroll; ri < min(len(rows), e.scroll+h); ri++ {
 		var b strings.Builder

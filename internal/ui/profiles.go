@@ -32,8 +32,9 @@ type profileAddedMsg struct {
 	err   error
 }
 
+// profilesH matches the chat header so [2] Chats and [3] Messages start on the same row.
 func (m Model) profilesH() int {
-	return 3
+	return headerH
 }
 
 func (m Model) activeProfile() *profile.Profile {
@@ -101,11 +102,14 @@ func (m Model) profilesView(w int) string {
 	if !p.NotifyEnabled() {
 		line += styleMuted.Render(" " + iconMute + " muted")
 	}
+	line += strings.Repeat(" ", max(1, w-lipgloss.Width(line)-lipgloss.Width(badge))) + badge
+	second := ""
 	if me := p.WA.Me(); me != "" && p.Linked() {
-		room := max(1, w-lipgloss.Width(line)-lipgloss.Width(badge)-3)
-		line += styleDim.Render(" · " + ansi.Truncate(sanitize(me), room, "…"))
+		second = "   " + styleDim.Render(ansi.Truncate(sanitize(me), max(1, w-3), "…"))
+	} else if !p.Linked() {
+		second = "   " + styleDim.Render(ansi.Truncate("not linked", max(1, w-3), "…"))
 	}
-	return line + strings.Repeat(" ", max(1, w-lipgloss.Width(line)-lipgloss.Width(badge))) + badge
+	return line + "\n" + second
 }
 
 func (m Model) profilesKey(key string) (tea.Model, tea.Cmd) {

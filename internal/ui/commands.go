@@ -20,6 +20,8 @@ var commands = []command{
 	{"profile", "<name>|add|rename", "switch, add or rename a profile"},
 	{"theme", "<name>", "pick a color theme"},
 	{"sticker", "", "send a recent sticker"},
+	{"upload", "[path…]", "send files (no path: file picker)"},
+	{"big", "", "large Compose on / off (ctrl+g)"},
 	{"archived", "", "show / hide archived chats"},
 	{"read", "", "mark the open chat as read"},
 	{"pin", "", "pin the chat"},

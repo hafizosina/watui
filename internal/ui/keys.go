@@ -27,6 +27,11 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.mode == modeNormal || m.mode == modeInsert {
 		switch k.String() {
+		case "ctrl+g":
+			if m.info == nil && !m.showHelp {
+				m.toggleBigCompose()
+				return m, nil
+			}
 		case "ctrl+h":
 			if (m.focus == focusList || m.focus == focusProfiles) && m.mode == modeNormal {
 				return m, tmuxPane("-L")
@@ -127,6 +132,10 @@ func (m Model) insertKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+s":
 		text, mentions := m.input.SendValue()
 		text = strings.TrimSpace(text)
+		if len(m.attach) > 0 && m.openJID != "" {
+			m.input.Reset()
+			return m, m.sendFilesCmd(text)
+		}
 		if text == "" || m.openJID == "" {
 			return m, nil
 		}
@@ -135,6 +144,12 @@ func (m Model) insertKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case "ctrl+e":
 		return m, m.editorCmd()
+	case "ctrl+v":
+		return m, pasteCmd()
+	case "p", "P":
+		if m.input.mode == vimNormal && m.input.pending == "" {
+			return m, vimPasteCmd(k.String())
+		}
 	}
 	if m.input.HandleKey(k) == editLeave {
 		m.enterNormal()
@@ -322,6 +337,12 @@ func (m Model) listKey(key string) (tea.Model, tea.Cmd) {
 	case "n":
 		m.openNewChat()
 		return m, nil
+	case "p":
+		if c, ok := m.currentChat(); ok && !m.onSpecialRow() {
+			m.open(c.JID)
+			m.focus = focusChat
+			return m, tea.Batch(m.markReadCmd(), pasteCmd())
+		}
 	case " ", "m":
 		m.openChatMenu()
 		return m, nil
@@ -352,6 +373,12 @@ func (m Model) chatKey(key string) (tea.Model, tea.Cmd) {
 		} else {
 			m.openMessageMenu()
 		}
+	case "p":
+		if m.openJID != "" {
+			return m, pasteCmd()
+		}
+	case "u":
+		return m, m.openFilePicker()
 	case "v":
 		m.toggleMark()
 	case "V":
@@ -359,6 +386,11 @@ func (m Model) chatKey(key string) (tea.Model, tea.Cmd) {
 	case "esc":
 		if m.hasSelection() {
 			m.clearSelection()
+			return m, nil
+		}
+		if len(m.attach) > 0 {
+			m.clearAttachments()
+			m.setFlash("attachments dropped", false)
 			return m, nil
 		}
 		if m.replyTo != nil || m.editing != nil {
@@ -500,6 +532,25 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.setFlash("theme "+arg+" (for this session — set theme = "+arg+" in ~/.config/watui/config to keep it)", false)
+		return m, nil
+	case "big", "large":
+		m.toggleBigCompose()
+		return m, nil
+	case "upload", "attach":
+		_, arg, _ := strings.Cut(cmd, " ")
+		if strings.TrimSpace(arg) == "" {
+			return m, m.openFilePicker()
+		}
+		if m.openJID == "" {
+			m.setFlash("open a chat first", true)
+			return m, nil
+		}
+		files, err := uploadArgs(arg)
+		if err != nil {
+			m.setFlash(err.Error(), true)
+			return m, nil
+		}
+		m.addAttachments(files)
 		return m, nil
 	case "sticker", "stickers":
 		m.focus = focusChat
