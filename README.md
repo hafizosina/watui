@@ -429,15 +429,20 @@ make deploy       # test, build, install to $APP_DIR (default ~/App/WaTui) and l
 make screenshots  # regenerate docs/screenshots from demo data
 ```
 
-### Releases and versions
+### Branches, releases and versions
 
-Versions follow [Semantic Versioning](https://semver.org) — `v0.y.z` while keys and settings may still change. Every change worth knowing goes in [CHANGELOG.md](CHANGELOG.md) under **Unreleased**. To release:
+| Branch | What it is |
+|---|---|
+| `dev` | where work happens; pushes run CI (Linux and macOS). `make deploy` installs your local build of it |
+| `main` | what is released on GitHub; it only moves when you release |
+
+Versions follow [Semantic Versioning](https://semver.org) — `v0.y.z` while keys and settings may still change. Every change worth knowing goes in [CHANGELOG.md](CHANGELOG.md) under **Unreleased**. To release, on `dev`:
 
 1. Rename **Unreleased** in `CHANGELOG.md` to `## [v0.1.1] - YYYY-MM-DD` (and add a fresh empty **Unreleased** above it), then commit.
-2. `make release V=v0.1.1` — checks you're on a clean `main`, the CHANGELOG has the section and the tests pass, then tags and pushes.
-3. GitHub builds Linux and macOS binaries, runs the tests on each, and publishes the release with the CHANGELOG section as its notes (`.github/workflows/release.yml`).
+2. `make release V=v0.1.1` — checks the working tree is clean, the CHANGELOG has the section, GitHub `main` has nothing `dev` lacks, and the tests pass; then moves `main` up to `dev`, tags it and pushes.
+3. GitHub builds Linux and macOS binaries, runs the tests on each, and publishes the release with the CHANGELOG section as its notes (`.github/workflows/release.yml`). A tag that isn't on `main` is refused.
 
-`watui version` shows the version: `v0.1.0` for a release, `v0.1.0-3-gabc1234` for a build 3 commits after it, `-dirty` with uncommitted changes.
+`watui version` shows where a build came from: `v0.1.0` for a release, `v0.1.0-3-gabc1234+dev` for a local build 3 commits after it on `dev`, with `-dirty` when there were uncommitted changes.
 
 A handy split: keep an installed `watui` for daily use and start the code you're working on with `make run` (or `go run ./cmd/watui`). Both use the same login and chats (`~/.local/share/watui`), so only one can run at a time. If one is already open, starting another shows where it is running (process, terminal, tmux window) and asks whether to close it and open here: it is asked to quit cleanly first, and forced after 5 seconds.
 

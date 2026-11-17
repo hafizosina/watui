@@ -26,6 +26,15 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Only release what is on main
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "$GITHUB_REF_NAME is not on main: release with 'make release' from dev" >&2
+            exit 1
+          }
 
       - uses: actions/setup-go@v5
         with:
