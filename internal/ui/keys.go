@@ -347,8 +347,20 @@ func (m Model) chatKey(key string) (tea.Model, tea.Cmd) {
 	case "ctrl+b", "pgup":
 		m.moveSelection(-25)
 	case " ", "m":
-		m.openMessageMenu()
+		if m.hasSelection() {
+			m.openSelectionMenu()
+		} else {
+			m.openMessageMenu()
+		}
+	case "v":
+		m.toggleMark()
+	case "V":
+		m.toggleRange()
 	case "esc":
+		if m.hasSelection() {
+			m.clearSelection()
+			return m, nil
+		}
 		if m.replyTo != nil || m.editing != nil {
 			m.replyTo, m.editing = nil, nil
 			m.input.Reset()

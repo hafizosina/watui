@@ -145,6 +145,9 @@ func (m Model) messagesTitle() string {
 	if m.openJID == "" {
 		return "[3] Messages"
 	}
+	if n := len(m.selection()); n > 0 {
+		return fmt.Sprintf("[3] Messages · %d selected", n)
+	}
 	return "[3] Messages" // who it is shows in the header above
 }
 
@@ -343,6 +346,9 @@ func (m *Model) renderMessages(forceBottom bool) {
 	m.foldable = map[string]bool{}
 	showSel := m.focus == focusChat && m.mode == modeNormal
 	marker := lipgloss.NewStyle().Foreground(colBlue).Bold(true).Render("▌")
+	markedBar := lipgloss.NewStyle().Foreground(colMagenta).Bold(true).Render("┃")
+	markedCur := lipgloss.NewStyle().Foreground(colMagenta).Bold(true).Render("▌")
+	selecting := m.hasSelection()
 
 	replyCount := map[string]int{}
 	for _, msg := range m.messages {
@@ -417,9 +423,19 @@ func (m *Model) renderMessages(forceBottom bool) {
 			}
 		}
 		block = append([]string(nil), block...)
-		if showSel && i == m.sel {
+		bar := ""
+		marked := selecting && m.isMarked(i)
+		switch {
+		case showSel && i == m.sel && marked:
+			bar = markedCur
+		case showSel && i == m.sel:
+			bar = marker
+		case marked:
+			bar = markedBar
+		}
+		if bar != "" {
 			for j, l := range block {
-				block[j] = marker + strings.TrimPrefix(l, " ")
+				block[j] = bar + strings.TrimPrefix(l, " ")
 			}
 		}
 		m.spans[i] = [2]int{len(lines), len(lines) + len(block) - 1}
@@ -778,7 +794,10 @@ func (m Model) hintPairs() [][2]string {
 	if m.menu != nil {
 		return [][2]string{{"Move", "^n/^p"}, {"Pick", "enter"}, {"Close", "esc"}}
 	}
-	return [][2]string{{"Select", "j/k"}, {"Menu", "space"}, {"Write", "i"}, {"Editor", "e"}, {"Back", "q"}, {"Next/prev chat", "J/K"}, {"Keybindings", "?"}}
+	if m.hasSelection() {
+		return [][2]string{{"Mark", "v"}, {"Range", "V"}, {"Actions", "space"}, {"Clear", "esc"}}
+	}
+	return [][2]string{{"Select", "j/k"}, {"Menu", "space"}, {"Multi-select", "v/V"}, {"Write", "i"}, {"Editor", "e"}, {"Back", "q"}, {"Next/prev chat", "J/K"}, {"Keybindings", "?"}}
 }
 
 func hints(pairs [][2]string) string {
@@ -806,7 +825,8 @@ func helpView(w int) string {
 		{"j / k", "select next / previous message"},
 		{"ctrl+d / ctrl+u", "jump 10 messages"},
 		{"gg / G", "oldest loaded (again: load older) / newest"},
-		{"space", "message menu"},
+		{"space", "message menu (with messages marked: bulk menu)"},
+		{"v / V", "mark / unmark message · start / keep a range (j/k extend)"},
 		{"i / a / enter", "start typing"},
 		{"e", "write the message in $EDITOR"},
 		{"q / esc", "back to chats"},
@@ -818,7 +838,8 @@ func helpView(w int) string {
 		{"options", "view profile i · expand/collapse z · replied message g · replies G"},
 		{" ", "reply r · edit e · react + · show/hide image v · view in nvim v"},
 		{" ", "play/pause o · speed . · stop x · open file/image o · save S"},
-		{" ", "copy y · forward f · star s · pin p · delete d · message info I"},
+		{" ", "copy y · forward f · star s · pin p · delete d · message info I · open link l"},
+		{"bulk", "copy y · forward f · star s / unstar u · save S · delete d · clear x"},
 		{"", ""},
 		{"", "Global"},
 		{"1 / 2 / 3 / 4", "focus profiles / chats / messages / compose"},

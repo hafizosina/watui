@@ -409,6 +409,17 @@ func (m *Model) openMessageMenu() {
 		}})
 	}
 	if !m.gone(msg) && msg.Text != "" {
+		if links := extractLinks(msg.Text); len(links) == 1 {
+			link := links[0]
+			items = append(items, menuItem{label: "Open link · " + ansi.Truncate(link, 40, "…"), key: "l", run: func(m *Model) tea.Cmd {
+				return openLinkCmd(link)
+			}})
+		} else if len(links) > 1 {
+			items = append(items, menuItem{label: fmt.Sprintf("Open link (%d)…", len(links)), key: "l", run: func(m *Model) tea.Cmd {
+				m.openLinksMenu(links)
+				return nil
+			}})
+		}
 		items = append(items, menuItem{label: "Copy text", key: "y", run: func(m *Model) tea.Cmd {
 			return copyCmd(plainText(msg))
 		}})

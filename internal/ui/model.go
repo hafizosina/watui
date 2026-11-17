@@ -125,6 +125,9 @@ type Model struct {
 	mentionSel     int
 	mentionHidden  string
 	expanded       map[string]bool
+	marked         map[string]bool          // multi-select, by message ID
+	markedMsgs     map[string]store.Message // the marked messages themselves
+	rangeFrom      string                   // V range anchor (message ID), "" when off
 	foldable       map[string]bool
 
 	vp         viewport.Model
@@ -165,6 +168,8 @@ func newModel(client *wa.Client, cfg config.Config, images *media.Manager, pl *p
 		forceHide:      map[string]bool{},
 		shownImages:    map[string]media.Quality{},
 		expanded:       map[string]bool{},
+		marked:         map[string]bool{},
+		markedMsgs:     map[string]store.Message{},
 		unread:         map[string]int{},
 		blocks:         map[string]cachedBlock{},
 		members:        map[string][]wa.Mentionable{},
@@ -458,6 +463,7 @@ func (m *Model) open(jid string) {
 	if m.openJID != jid {
 		m.input.Reset()
 		m.replyTo, m.editing = nil, nil
+		m.marked, m.markedMsgs, m.rangeFrom = map[string]bool{}, map[string]store.Message{}, ""
 	}
 	if m.opts.Notifier != nil {
 		if p := m.activeProfile(); p != nil {

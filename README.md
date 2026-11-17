@@ -161,12 +161,26 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 | Save to ~/Downloads/WhatsApp | `S` | pictures, videos, voice notes, stickers, documents (original file name, never overwrites) |
 | Show / Hide image | `v` | shows pictures that are hidden (older than the newest 40, or `images=off`/`thumbnail`) |
 | Open image in viewer | `o` | opens the downloaded picture with `xdg-open` |
+| Open link | `l` | messages with http(s)/www links: opens in the default browser (`xdg-open`); several links → pick one with `1`–`9` |
 | Copy text | `y` | via `xclip` |
 | Forward | `f` | type to search a chat, `Enter` to send |
 | Star / Unstar | `s` | ★ shows next to the message |
 | Pin | `p` | 24 hours, 7 days or 30 days, or unpin |
 | Delete for everyone | `d` | your own messages, first 2 days; asks first |
 | Message info | `I` | your message: when sent, delivered and read (group: who read it and when, who only got it, how many are still waiting; `▶ played` for voice notes). Someone else's: when they sent it, when it reached this computer, when you read it. Updates live; `j`/`k` scroll, `Esc` back |
+
+### Selecting several messages
+
+In the messages pane, `v` marks or unmarks the selected message (a magenta bar shows next to it), and `V` starts a range that follows `j`/`k` — press `V` again to keep it. The panel title shows how many are selected. `Space` opens the bulk menu, `Esc` clears the selection; switching chats clears it too.
+
+| Option | Key | Notes |
+|---|---|---|
+| Copy text | `y` | all of them, as `[15:04, 17/11/2026] Name: text` lines |
+| Forward… | `f` | pick a chat; sends them oldest first (messages that can't be forwarded are skipped) |
+| Star / Unstar | `s` / `u` | |
+| Save media | `S` | pictures, videos, voice notes, documents to ~/Downloads/WhatsApp |
+| Delete for everyone | `d` | only when all are your own and within 2 days; asks first |
+| Clear selection | `x` | |
 
 While typing after `:`, a popup suggests commands (with a short description) and their arguments — theme names, profile names, `:set` keys and values. `Tab`/`Ctrl+n` completes and cycles, `Shift+Tab`/`Ctrl+p` goes back, `Enter` runs.
 
