@@ -76,10 +76,14 @@ A header above the messages shows who the open chat is with: avatar, name, pin/m
 | | `/` | search chats |
 | | `A` | show archived chats (or `Enter` on the ** Archived (N)** row at the top; **← Back to chats** returns) |
 | | `n` | new chat / new group (also `:new`) |
+| | `p` | open the highlighted chat and paste a copied picture, file or text into it |
 | | `Space` | chat menu: Open · Contact / Group info · Pin · Mute (8h / 1 week / always) · Archive · Mark read/unread · Copy number · Leave group · Delete chat |
 | NORMAL (messages) | `j` / `k` | select next / previous message |
 | | `Ctrl+d` / `Ctrl+u`, `gg` / `G` | jump (a chat opens with its newest 200 messages; `k` or `gg` at the top loads older ones) |
-| | `Space` | message menu (like right-click) |
+| | `Space` | message menu (like right-click); with messages marked, the bulk menu |
+| | `v` / `V` | mark a message · start / keep a range (see [Selecting several messages](#selecting-several-messages)) |
+| | `p` | paste a copied picture, file or text (see [Sending files and pictures](#sending-files-and-pictures)) |
+| | `u` | pick files to send (file dialog) |
 | | `i` / `a` / `Enter` | type a message |
 | | `e` | write the message in `$EDITOR` (nvim) |
 | | `q` / `Esc` | back to the list |
@@ -87,11 +91,13 @@ A header above the messages shows who the open chat is with: avatar, name, pin/m
 | | `Ctrl+j` / `Ctrl+k` | Messages ↔ Compose (Compose opens in NORMAL; from Compose only in NORMAL); at the edge, the tmux pane above/below |
 | | `J` / `K` | next / previous chat |
 | | `Ctrl+t` | sticker picker (Messages or Compose) |
+| | `Ctrl+g` | large Compose on / off (Messages or Compose) |
 | | `Ctrl+x` | decline a ringing call |
 | | `:` | command line |
 | | `?` | keybindings |
 | Compose | `Ctrl+s` | send (from any vim mode) |
 | | `Ctrl+e` | edit in `$EDITOR` |
+| | `Ctrl+v` | paste a copied picture or file as an attachment (text too) |
 
 ### Compose is a small vim
 
@@ -102,6 +108,8 @@ A header above the messages shows who the open chat is with: avatar, name, pin/m
 | INSERT | type; `Enter` new line; `Esc` or `jk` → NORMAL; `Ctrl+w` delete word; `Ctrl+u` delete to line start |
 | NORMAL | `h j k l w b e 0 ^ $ gg G` move · `i a I A o O` insert · `x X dd D dw de diw daw` delete · `cw ce ciw cc C s S` change · `yy Y yiw p P` yank/paste · `u` / `Ctrl+r` undo/redo · `J` join · `~` case · `r` replace · `v` / `V` visual · `Esc` leaves Compose |
 | VISUAL / V-LINE | move to extend · `d` / `x` delete · `y` yank · `c` change · `~ u U` case · `o` other end · `p` replace with yank · `Esc` back |
+
+**Clipboard:** Compose shares the system clipboard, like vim's `clipboard=unnamedplus`. What you yank or delete (`yy`, `dd`, `dw`, `x`, visual `y`, …) can be pasted into other apps, and `p`/`P` paste whatever was copied last — in watui or elsewhere (Sublime, browser…). Your own line yank still pastes as a line. A copied picture or file is attached instead. Note that `x` also replaces the clipboard, so paste text copied elsewhere before fixing typos.
 
 ### Profile details
 
@@ -173,10 +181,10 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 
 ### Sending files and pictures
 
-- **Paste** — copy a picture (screenshot tool, browser *Copy image*) or one or more files (`Ctrl+C` in Nemo/Nautilus, or a copied path), then press `p` — in the messages pane, in the chat list (opens the highlighted chat first) or in Compose's vim normal mode — or `Ctrl+V` while typing. Copied text goes into Compose instead (in Compose, `p` still pastes what you yanked there first).
+- **Paste** — copy a picture (screenshot tool, browser *Copy image*) or one or more files (`Ctrl+C` in Nemo/Nautilus, or a copied path), then press `p` — in the messages pane, in the chat list (opens the highlighted chat first) or in Compose's vim normal mode — or `Ctrl+V` while typing. Copied text goes into Compose instead.
 - **Upload** — `u` in the messages pane opens the file dialog (zenity, pick several with `Ctrl`/`Shift`), or type `:upload ~/path/to/file.pdf`.
 
-The files wait in Compose (its title shows `📎 2 files: …`): type a caption if you like (it goes with the first file) and press `Ctrl+S`. `Esc` in the messages pane drops them. JPEG/PNG pictures, MP4 videos and MP3/OGG/M4A audio up to 16 MB go as media; everything else, and anything bigger, as a document (up to 2 GB). Needs `xclip` for paste, `zenity` for the dialog, and `ffprobe`/`ffmpeg` for video length and preview (optional).
+The files wait in Compose (its title shows `📎 2 files: …`): type a caption if you like (it goes with the first file) and press `Ctrl+S`. `Esc` in the messages pane drops them. Attaching cancels a reply you started — files go out as new messages. A file you send opens and previews straight away, without downloading it back. JPEG/PNG pictures, MP4 videos and MP3/OGG/M4A audio up to 16 MB go as media; everything else, and anything bigger, as a document (up to 2 GB). Needs `xclip` for paste, `zenity` for the dialog, and `ffprobe`/`ffmpeg` for video length and preview (optional).
 
 ### Selecting several messages
 
@@ -201,6 +209,7 @@ While typing after `:`, a popup suggests commands (with a short description) and
 | `:theme [name]` | theme picker, or switch directly |
 | `:sticker` | send a recent sticker |
 | `:upload [path…]` | send files; no path opens the file dialog |
+| `:big` | large Compose on / off (same as `Ctrl+g`) |
 | `:pin` `:unpin` · `:mute` `:unmute` · `:archive` `:unarchive` | the open chat |
 | `:archived` | show / hide archived chats |
 | `:read` | mark the open chat read |
@@ -271,15 +280,15 @@ With vim-tmux-navigator, tmux steals `Ctrl+h`/`Ctrl+l` unless watui is in its vi
 | `watui.log` | errors (`WATUI_DEBUG=1 watui` logs more) |
 | `profiles/<name>/` | the same files for each extra profile |
 
-`~/.cache/watui/` (safe to delete): `images/` (pictures, animated stickers/GIF frames), `media/` (downloaded videos, voice notes, documents), `sounds/` (notification sounds).
+`~/.cache/watui/` (safe to delete): `images/` (pictures, animated stickers/GIF frames), `media/` (downloaded videos, voice notes, documents), `sounds/` (notification sounds), `pasted/` (pictures pasted from the clipboard, removed once sent).
 
 Saved files (`S` in the message menu) go to `~/Downloads/WhatsApp/`.
 
 ## Not supported yet
 
-Sending new images, files or voice notes, playing video inside the terminal, Lottie (vector) stickers, voice/video calls, showing which message is pinned.
+Recording and sending voice notes, sending a file as a reply, searching inside messages (`/` filters chat names), playing video inside the terminal, Lottie (vector) stickers, voice/video calls, showing which message is pinned.
 
-Video and voice notes need `mpv`; `ffmpeg` grabs video frames and animates GIFs inline; ImageMagick (`convert`) animates stickers: `sudo apt install mpv ffmpeg imagemagick`.
+Video and voice notes need `mpv`; `ffmpeg` grabs video frames and animates GIFs inline; ImageMagick (`convert`) animates stickers: `sudo apt install mpv ffmpeg imagemagick`. Paste and copy use `xclip`; the file dialog uses `zenity`: `sudo apt install xclip zenity`.
 
 ## Keep it updated
 
@@ -293,7 +302,7 @@ go get go.mau.fi/whatsmeow@latest && go mod tidy && make install
 
 ```
 cmd/watui/         entry point: subcommands, QR login, single-instance lock and takeover, starts the TUI
-internal/wa/       whatsmeow wrapper: events → local store, send/edit/delete/react/forward/star/pin, calls, contact/group info, media download
+internal/wa/       whatsmeow wrapper: events → local store, send/edit/delete/react/forward/star/pin, calls, contact/group info, media download and upload
 internal/store/    SQLite message store (messages.db)
 internal/media/    picture cache and kitty graphics (Unicode placeholders, tmux passthrough, animation)
 internal/profile/  several WhatsApp accounts, each with its own client and store
