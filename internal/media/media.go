@@ -57,6 +57,8 @@ type entry struct {
 	cols  int
 	rows  int
 	err   error
+	pic   cached
+	gen   uint64 // Manager.gen when the picture was last sent to the terminal
 }
 
 type Manager struct {
@@ -70,6 +72,9 @@ type Manager struct {
 	mu      sync.Mutex
 	entries map[string]*entry
 	nextID  uint32
+	gen     uint64
+
+	wmu sync.Mutex // one escape sequence at a time on the tty
 }
 
 var imageIDs atomic.Uint32
@@ -117,27 +122,46 @@ type Box struct {
 func (m *Manager) Request(chatJID, msgID string, q Quality, box Box) {
 	k := key(msgID, q)
 	m.mu.Lock()
-	if _, ok := m.entries[k]; ok {
+	if e, ok := m.entries[k]; ok {
+		resend := e.state == stateReady && e.gen != m.gen
+		if resend {
+			e.gen = m.gen
+		}
+		id, pic, cols, rows := e.id, e.pic, e.cols, e.rows
 		m.mu.Unlock()
+		if resend {
+			go func() { _ = m.transmit(id, pic, cols, rows) }()
+		}
 		return
 	}
 	e := &entry{state: stateLoading}
 	m.entries[k] = e
+	gen := m.gen
 	m.mu.Unlock()
 
 	go func() {
 		m.sem <- struct{}{}
 		defer func() { <-m.sem }()
-		id, cols, rows, err := m.prepare(chatJID, msgID, q, box)
+		id, cols, rows, pic, err := m.prepare(chatJID, msgID, q, box)
 		m.mu.Lock()
 		if err != nil {
 			e.state, e.err = stateFailed, err
 		} else {
-			e.state, e.id, e.cols, e.rows = stateReady, id, cols, rows
+			e.state, e.id, e.cols, e.rows, e.pic, e.gen = stateReady, id, cols, rows, pic, gen
 		}
 		m.mu.Unlock()
 		m.notify()
 	}()
+}
+
+// Invalidate marks every picture as possibly missing from the terminal, so the
+// next Request for it sends it again. tmux drops passthrough while the pane is
+// hidden (allow-passthrough on), and a second tmux client never saw what the
+// first one was sent; call this when the pane regains focus.
+func (m *Manager) Invalidate() {
+	m.mu.Lock()
+	m.gen++
+	m.mu.Unlock()
 }
 
 type cached struct {
@@ -215,20 +239,20 @@ func pathPayload(path string) []byte {
 	return []byte(base64.StdEncoding.EncodeToString([]byte(path)))
 }
 
-func (m *Manager) prepare(chatJID, msgID string, q Quality, box Box) (uint32, int, int, error) {
+func (m *Manager) prepare(chatJID, msgID string, q Quality, box Box) (uint32, int, int, cached, error) {
 	c, ok := m.readCache(msgID, q)
 	if !ok {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
 		frames, err := m.load(ctx, chatJID, msgID, q)
 		if err != nil {
-			return 0, 0, 0, err
+			return 0, 0, 0, cached{}, err
 		}
 		if len(frames) == 0 {
-			return 0, 0, 0, fmt.Errorf("no picture")
+			return 0, 0, 0, cached{}, fmt.Errorf("no picture")
 		}
 		if c, err = m.writeCache(msgID, q, frames); err != nil {
-			return 0, 0, 0, err
+			return 0, 0, 0, cached{}, err
 		}
 	}
 	cols, rows := fit(c.w, c.h, box, cellRatio())
@@ -239,18 +263,25 @@ func (m *Manager) prepare(chatJID, msgID string, q Quality, box Box) (uint32, in
 		id = m.nextID
 		m.mu.Unlock()
 	}
+	if err := m.transmit(id, c, cols, rows); err != nil {
+		return 0, 0, 0, cached{}, err
+	}
+	return id, cols, rows, c, nil
+}
+
+// transmit sends the picture to kitty as image id with a virtual placement of
+// cols×rows cells. Sending the same id again replaces the old copy.
+func (m *Manager) transmit(id uint32, c cached, cols, rows int) error {
 	seq := ansi.KittyGraphics(pathPayload(c.paths[0]),
 		"a=T", "U=1", "f=100", "t=f", "q=2",
 		fmt.Sprintf("i=%d", id), fmt.Sprintf("c=%d", cols), fmt.Sprintf("r=%d", rows))
 	if err := m.write(seq); err != nil {
-		return 0, 0, 0, err
+		return err
 	}
 	if len(c.paths) > 1 {
-		if err := m.animate(id, c); err != nil {
-			return 0, 0, 0, err
-		}
+		return m.animate(id, c)
 	}
-	return id, cols, rows, nil
+	return nil
 }
 
 func (m *Manager) animate(id uint32, c cached) error {
@@ -272,6 +303,8 @@ func (m *Manager) write(seq string) error {
 	if m.inTmux {
 		seq = ansi.TmuxPassthrough(seq)
 	}
+	m.wmu.Lock()
+	defer m.wmu.Unlock()
 	_, err := m.tty.WriteString(seq)
 	return err
 }

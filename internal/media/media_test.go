@@ -66,6 +66,58 @@ func TestPipeline(t *testing.T) {
 	}
 }
 
+func TestInvalidateResends(t *testing.T) {
+	out, err := os.CreateTemp(t.TempDir(), "tty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{}, 1)
+	m := &Manager{
+		load: func(ctx context.Context, chat, id string, q Quality) ([]Frame, error) {
+			return []Frame{{Img: image.NewRGBA(image.Rect(0, 0, 40, 30))}}, nil
+		},
+		notify:   func() { done <- struct{}{} },
+		cacheDir: t.TempDir(),
+		tty:      out,
+		sem:      make(chan struct{}, 1),
+		entries:  map[string]*entry{},
+		nextID:   6,
+	}
+	box := Box{MaxCols: 20, MaxRows: 10}
+	sends := func() int {
+		written, _ := os.ReadFile(out.Name())
+		return strings.Count(string(written), "a=T")
+	}
+
+	m.Request("chat", "MSG1", Full, box)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("image never loaded")
+	}
+	m.Request("chat", "MSG1", Full, box)
+	time.Sleep(50 * time.Millisecond)
+	if n := sends(); n != 1 {
+		t.Fatalf("a ready picture should not be sent again, got %d sends", n)
+	}
+
+	m.Invalidate() // pane regained focus
+	m.Request("chat", "MSG1", Full, box)
+	m.Request("chat", "MSG1", Full, box)
+	deadline := time.Now().Add(5 * time.Second)
+	for sends() < 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if n := sends(); n != 2 {
+		t.Fatalf("after Invalidate the picture should be sent exactly once more, got %d sends", n)
+	}
+	written, _ := os.ReadFile(out.Name())
+	if strings.Count(string(written), "i=7") != 2 {
+		t.Fatalf("resend should reuse image id 7: %q", written)
+	}
+}
+
 func TestFit(t *testing.T) {
 	cases := []struct {
 		w, h, cols, rows int

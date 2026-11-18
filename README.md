@@ -359,7 +359,7 @@ Calls: watui can't answer calls (whatsmeow has no audio/video), but:
 
 Change a setting while watui is running with `:set images=thumbnail` (that only lasts until you quit), or type `:set` to see the current values.
 
-Pictures need kitty. Inside tmux they also need `set -g allow-passthrough on` in your tmux config.
+Pictures need kitty. Inside tmux they also need `set -g allow-passthrough all` in your tmux config (`on` drops pictures that arrive while the pane is hidden; watui re-sends them when the pane gets focus, which needs `set -g focus-events on`).
 
 With [vim-tmux-navigator](https://github.com/christoomey/vim-tmux-navigator), tmux takes `Ctrl+h/j/k/l` before watui sees them. Add `watui` to its vim pattern by putting these lines in `~/.tmux.conf` **after** the `run '~/.tmux/plugins/tpm/tpm'` line:
 

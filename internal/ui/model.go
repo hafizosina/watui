@@ -229,6 +229,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.FocusMsg:
 		m.focused = true
+		if m.images != nil {
+			// pictures sent while the pane was hidden never reached kitty
+			m.images.Invalidate()
+			m.renderMessages(false)
+		}
 		return m, m.markReadCmd()
 	case tea.BlurMsg:
 		m.focused = false
