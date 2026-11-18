@@ -295,7 +295,6 @@ func (m *Model) openMessageMenu() {
 	}
 	if msg.MediaType == wa.MediaVideo && !m.gone(msg) {
 		items = append(items, menuItem{label: "Play video", key: "o", run: func(m *Model) tea.Cmd {
-			m.setFlash("downloading video…", false)
 			client := m.wa
 			return m.actionCmd("", func(ctx context.Context) error {
 				path, _, err := client.MediaFile(ctx, msg.ChatJID, msg.ID)
@@ -328,7 +327,6 @@ func (m *Model) openMessageMenu() {
 			)
 		} else {
 			items = append(items, menuItem{label: "Play", key: "o", run: func(m *Model) tea.Cmd {
-				m.setFlash("downloading…", false)
 				client, pl := m.wa, m.player
 				return m.actionCmd("", func(ctx context.Context) error {
 					path, _, err := client.MediaFile(ctx, msg.ChatJID, msg.ID)
@@ -344,7 +342,6 @@ func (m *Model) openMessageMenu() {
 	if msg.MediaType == wa.MediaDoc && !m.gone(msg) {
 		client := m.wa
 		items = append(items, menuItem{label: "Open file", key: "o", run: func(m *Model) tea.Cmd {
-			m.setFlash("downloading…", false)
 			return m.actionCmd("", func(ctx context.Context) error {
 				path, _, err := client.MediaFile(ctx, msg.ChatJID, msg.ID)
 				if err != nil {
@@ -355,7 +352,6 @@ func (m *Model) openMessageMenu() {
 		}})
 		if isTextFile(client.FileName(msg.ChatJID, msg.ID)) {
 			items = append(items, menuItem{label: "View in nvim (read-only)", key: "v", run: func(m *Model) tea.Cmd {
-				m.setFlash("downloading…", false)
 				return func() tea.Msg {
 					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 					defer cancel()
@@ -403,7 +399,6 @@ func (m *Model) openMessageMenu() {
 		// the original from WhatsApp, not the thumbnail / resized copy drawn in the terminal
 		client := m.wa
 		items = append(items, menuItem{label: "Open image in viewer", key: "o", run: func(m *Model) tea.Cmd {
-			m.setFlash("downloading image…", false)
 			return m.actionCmd("", func(ctx context.Context) error {
 				path, _, err := client.MediaFile(ctx, msg.ChatJID, msg.ID)
 				if err != nil {

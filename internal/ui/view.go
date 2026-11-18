@@ -493,9 +493,10 @@ func (m Model) blockKey(msg store.Message, newGroup bool, w, replies int) string
 		reactions = append(reactions, who+"="+e)
 	}
 	sort.Strings(reactions)
-	return fmt.Sprintf("%d|%t|%s|%d|%t|%t|%t|%t|%s|%s|%s|%s|%d|%t|%s|%s|%s",
+	return fmt.Sprintf("%d|%t|%s|%d|%t|%t|%t|%t|%s|%s|%s|%s|%d|%t|%s|%s|%s|%s",
 		w, newGroup, m.withNames(msg.Text), msg.Status, msg.Edited, msg.Deleted, msg.Starred, msg.Forwarded,
-		msg.QuoteID, m.withNames(msg.QuoteText), strings.Join(reactions, ","), msg.MediaType, replies, m.expanded[msg.ID], img, msg.SenderName, m.msgSearch)
+		msg.QuoteID, m.withNames(msg.QuoteText), strings.Join(reactions, ","), msg.MediaType, replies, m.expanded[msg.ID], img, msg.SenderName, m.msgSearch,
+		downloadBar(msg.ID))
 }
 
 // bubble frames one message: others get a bar in their color on the left,
@@ -611,11 +612,12 @@ func (m Model) renderBody(msg store.Message, w int, showImage bool, q media.Qual
 	var marks []string
 	msg.Text, marks = m.withMentionLabels(msg.Text)
 	text := sanitize(msg.Text)
+	bar := downloadBar(msg.ID)
 	if msg.MediaType == wa.MediaAudio {
-		return m.audioLine(msg, text) + m.suffix(msg)
+		return m.audioLine(msg, text, bar) + m.suffix(msg)
 	}
 	if msg.MediaType == wa.MediaDoc {
-		return m.documentLines(msg, text, w)
+		return m.documentLines(msg, text, w, bar)
 	}
 	if line, ok := callLine(text); ok {
 		return "   " + line
@@ -628,22 +630,45 @@ func (m Model) renderBody(msg store.Message, w int, showImage bool, q media.Qual
 			for _, l := range lines {
 				picture = append(picture, "   "+l)
 			}
-			text = captionOf(msg)
+			text = captionOf(msg, bar)
+			if msg.MediaType == wa.MediaVideo {
+				bar = "" // in place of the video's "space → Play"
+			}
 		case ok && status != "":
 			text = sanitize(msg.Text) + " " + styleDim.Render("("+status+")")
 		}
 	}
+	if bar != "" {
+		bar = "\n   " + strings.TrimPrefix(bar, "  ") // under the picture / caption
+	}
 	body := m.renderText(msg, text, w, marks...)
 	if len(picture) == 0 {
-		return body
+		return body + bar
 	}
 	if text == "" {
-		return strings.Join(picture, "\n") + m.suffix(msg)
+		return strings.Join(picture, "\n") + m.suffix(msg) + bar
 	}
-	return strings.Join(picture, "\n") + "\n" + body
+	return strings.Join(picture, "\n") + "\n" + body + bar
 }
 
-func (m Model) audioLine(msg store.Message, text string) string {
+// downloadBar shows how far the message's media download is, drawn on the
+// attachment itself in place of its "space → Open" hint; "" when not downloading.
+func downloadBar(msgID string) string {
+	done, total, ok := wa.DownloadProgress(msgID)
+	if !ok {
+		return ""
+	}
+	if total <= 0 {
+		return styleDim.Render("  ↓ " + wa.Size(uint64(done)))
+	}
+	const barW = 12
+	frac := min(1, float64(done)/float64(total))
+	n := int(frac * barW)
+	return "  " + lipgloss.NewStyle().Foreground(colGreen).Render(strings.Repeat("━", n)) +
+		styleDim.Render(strings.Repeat("─", barW-n)+fmt.Sprintf(" %d%% · %s", int(frac*100), wa.Size(uint64(min(done, total))))) // the label already says the size
+}
+
+func (m Model) audioLine(msg store.Message, text, bar string) string {
 	label := strings.Trim(strings.SplitN(text, "]", 2)[0], "[")
 	if m.player != nil {
 		if st, ok := m.player.State(); ok && st.MsgID == msg.ID {
@@ -666,17 +691,25 @@ func (m Model) audioLine(msg store.Message, text string) string {
 				styleText.Render(clock(st.Position)+" / "+clock(st.Duration)) + speed
 		}
 	}
-	return "   " + styleKey.Render("▷ ") + styleText.Render(label) + styleDim.Render("  · space → Play")
+	hint := styleDim.Render("  · space → Play")
+	if bar != "" {
+		hint = bar
+	}
+	return "   " + styleKey.Render("▷ ") + styleText.Render(label) + hint
 }
 
-func (m Model) documentLines(msg store.Message, text string, w int) string {
+func (m Model) documentLines(msg store.Message, text string, w int, bar string) string {
 	label, caption := text, ""
 	if strings.HasPrefix(text, "[document:") {
 		label, caption, _ = strings.Cut(strings.TrimPrefix(text, "[document:"), "]")
 		label = strings.TrimSpace(label)
 	}
-	line := "   " + styleKey.Render(iconFile+" ") + styleText.Bold(true).Render(ansi.Truncate(label, max(10, w-24), "…")) +
-		styleDim.Render("  · space → Open") + m.suffix(msg)
+	hint := styleDim.Render("  · space → Open")
+	if bar != "" {
+		hint = bar
+	}
+	line := "   " + styleKey.Render(iconFile+" ") + styleText.Bold(true).Render(ansi.Truncate(label, max(10, w-8-lipgloss.Width(hint)), "…")) +
+		hint + m.suffix(msg)
 	if caption = strings.TrimSpace(caption); caption != "" {
 		return line + "\n" + m.renderText(store.Message{}, caption, w)
 	}
@@ -688,7 +721,7 @@ func clock(d time.Duration) string {
 	return fmt.Sprintf("%d:%02d", s/60, s%60)
 }
 
-func captionOf(msg store.Message) string {
+func captionOf(msg store.Message, bar string) string {
 	text := sanitize(msg.Text)
 	for _, tag := range []string{"[image]", "[sticker]"} {
 		if strings.HasPrefix(text, tag) {
@@ -697,7 +730,11 @@ func captionOf(msg store.Message) string {
 	}
 	if msg.MediaType == wa.MediaVideo && strings.HasPrefix(text, "[") {
 		label, caption, _ := strings.Cut(strings.TrimPrefix(text, "["), "]")
-		out := styleKey.Render("▶ "+label) + styleDim.Render("  · space → Play")
+		hint := styleDim.Render("  · space → Play")
+		if bar != "" {
+			hint = bar
+		}
+		out := styleKey.Render("▶ "+label) + hint
 		if caption = strings.TrimSpace(caption); caption != "" {
 			out += "\n" + caption
 		}

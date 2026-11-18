@@ -106,6 +106,7 @@ type Model struct {
 	replyTo      *store.Message
 	editing      *store.Message
 	drafts       map[string]store.Draft // chat JID → unsent Compose text; nil until loaded
+	downloading  bool                   // a media download was in flight at the last tick
 	forceShow    map[string]bool
 	forceHide    map[string]bool
 	shownImages  map[string]media.Quality
@@ -287,6 +288,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if _, playing := m.player.State(); playing {
 				m.renderMessages(false)
 			}
+		}
+		// download bars on attachments move, and go away once done
+		if busy := wa.Downloading(); busy || m.downloading {
+			m.downloading = busy
+			m.renderMessages(false)
 		}
 		return m, tick()
 	case actionDoneMsg:

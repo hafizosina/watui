@@ -6,12 +6,14 @@ All notable changes to watui. Versions follow [Semantic Versioning](https://semv
 
 ### Added
 - Drafts: text left in Compose when you switch chats is kept per chat (with @mentions and the reply you started) and comes back when you return, also after a restart. The chat list shows it as `Draft: …`.
+- Download progress on the attachment itself: while a file, video, voice note or picture downloads, a bar with the percentage replaces its `space → Open` / `Play` hint (no message at the bottom).
 
 ### Changed
 - Deleting in Compose (`dd`, `x`, `dw`, `cw`, visual `d`, …) no longer copies the text: it doesn't touch the clipboard, and `p` doesn't paste it back. Only yanks copy.
 
 ### Fixed
 - In tmux, a picture that arrived while watui's pane was hidden showed as an empty block (tmux drops kitty graphics for hidden panes with `allow-passthrough on`). watui now re-sends the open chat's pictures when its pane gets focus back; the README now recommends `allow-passthrough all`.
+- Opening, playing or saving a large file no longer fails after 60 seconds: a download now only stops when nothing arrives for a minute. Downloads stream to disk instead of being held in memory.
 
 ## [v0.1.1] - 2026-11-17
 

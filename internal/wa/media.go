@@ -9,6 +9,7 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -163,12 +164,8 @@ func (c *Client) MediaFile(ctx context.Context, chatJID, msgID string) (string, 
 	if _, err := os.Stat(path); err == nil {
 		return path, kind, nil
 	}
-	data, err := c.WA.Download(ctx, msg)
-	if err != nil {
-		return "", "", err
-	}
 	tmp := path + ".part"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	if err := c.downloadToFile(ctx, msgID, msg, tmp); err != nil {
 		return "", "", err
 	}
 	return path, kind, os.Rename(tmp, path)
@@ -376,11 +373,21 @@ func (c *Client) SaveMedia(ctx context.Context, chatJID, msgID string, when stri
 		name = orig
 	}
 	dst := uniquePath(filepath.Join(dir, name))
-	data, err := os.ReadFile(src)
+	in, err := os.Open(src)
 	if err != nil {
 		return "", err
 	}
-	return dst, os.WriteFile(dst, data, 0o644)
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(dst)
+		return "", err
+	}
+	return dst, out.Close()
 }
 
 func uniquePath(path string) string {
