@@ -29,6 +29,10 @@ type Config struct {
 
 	Notify      NotifyMode
 	NotifySound string
+	// Per kind of message; "" follows NotifySound.
+	NotifySoundPersonal string // direct messages
+	NotifySoundMention  string // @mentions of you and replies to you in groups
+	NotifySoundGroup    string // other group messages
 
 	Theme string
 }
@@ -86,9 +90,16 @@ show_deleted = on
 #   off      none
 notify = on
 
-# Notification sound: watui (built-in chime; calls ring), system (desktop default), off,
-# or a path to any .ogg/.wav file.
+# Notification sound: watui (built-in sounds: sword for direct messages and mentions,
+# chime for other group messages, a ring for calls), system (desktop default), off,
+# one built-in sound for everything (sword, chime, soft, ping), or a path to any .ogg/.wav file.
 notify_sound = watui
+
+# A different sound per kind of message (empty = follow notify_sound):
+# sword, chime, soft, ping, system, off or a file path.
+notify_sound_personal =
+notify_sound_mention =
+notify_sound_group =
 `
 
 func Path() (string, error) {
@@ -175,14 +186,24 @@ func (c *Config) Set(assignment string) error {
 		c.Theme = value
 	case "notify_sound":
 		if value == "" {
-			return fmt.Errorf("notify_sound needs a value: watui, system, off or a file path")
+			return fmt.Errorf("notify_sound needs a value: watui, %s, system, off or a file path", strings.Join(SoundNames, ", "))
 		}
-		if value != "watui" && value != "system" && value != "off" {
-			if _, err := os.Stat(value); err != nil {
-				return fmt.Errorf("notify_sound file %q: %w", value, err)
-			}
+		if err := checkSound(key, value); err != nil {
+			return err
 		}
 		c.NotifySound = value
+	case "notify_sound_personal", "notify_sound_mention", "notify_sound_group":
+		if err := checkSound(key, value); err != nil {
+			return err
+		}
+		switch key {
+		case "notify_sound_personal":
+			c.NotifySoundPersonal = value
+		case "notify_sound_mention":
+			c.NotifySoundMention = value
+		default:
+			c.NotifySoundGroup = value
+		}
 	case "show_deleted":
 		switch value {
 		case "on", "true", "yes":
@@ -200,6 +221,27 @@ func (c *Config) Set(assignment string) error {
 		c.CollapseLines = n
 	default:
 		return fmt.Errorf("unknown setting %q", key)
+	}
+	return nil
+}
+
+// SoundNames are watui's built-in notification sounds.
+var SoundNames = []string{"sword", "chime", "soft", "ping"}
+
+// checkSound accepts "" (follow notify_sound), a built-in name, watui, system,
+// off, or an existing file.
+func checkSound(key, value string) error {
+	switch value {
+	case "", "watui", "system", "off":
+		return nil
+	}
+	for _, n := range SoundNames {
+		if value == n {
+			return nil
+		}
+	}
+	if _, err := os.Stat(value); err != nil {
+		return fmt.Errorf("%s: %q is not %s, system, off or a file: %w", key, value, strings.Join(SoundNames, ", "), err)
 	}
 	return nil
 }

@@ -17,9 +17,19 @@ type Action struct {
 type SoundKind int
 
 const (
-	SoundMessage SoundKind = iota
+	SoundMessage SoundKind = iota // direct message
 	SoundCall
+	SoundGroup   // any other group message
+	SoundMention // an @mention of you, or a reply to you, in a group
 )
+
+// defaultSound is what "watui" means for each kind.
+var defaultSound = map[SoundKind]string{
+	SoundMessage: "sword",
+	SoundMention: "sword",
+	SoundGroup:   "chime",
+	SoundCall:    "ring",
+}
 
 type Note struct {
 	Key     string
@@ -35,26 +45,41 @@ type Notifier struct {
 	mu  sync.Mutex
 	ids map[string]uint32
 
-	soundMode    string
-	messageSound string
-	callSound    string
+	sounds map[SoundKind]string // "off", "system", or a file to play; "" = the desktop's sound
 }
 
-// SetSound picks how notifications sound: "watui" (built-in chimes), "system", "off", or a file path.
-func (n *Notifier) SetSound(mode, cacheDir string) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.soundMode = mode
-	n.messageSound, n.callSound = "", ""
-	switch mode {
-	case "system", "off", "":
-	case "watui":
-		if msg, call, err := SoundFiles(cacheDir); err == nil {
-			n.messageSound, n.callSound = msg, call
+// SetSound picks how notifications sound. base is notify_sound and covers every
+// kind: "watui" (each kind its own built-in sound), a built-in name ("chime",
+// "sword", "soft", "ping"), "system", "off", or a file path. perKind overrides it for
+// some kinds; "" there means follow base. Calls ring unless sound is off,
+// system or a file.
+func (n *Notifier) SetSound(base string, perKind map[SoundKind]string, cacheDir string) {
+	sounds := map[SoundKind]string{}
+	for kind, def := range defaultSound {
+		v := base
+		if o := perKind[kind]; o != "" && kind != SoundCall {
+			v = o
 		}
-	default:
-		n.messageSound, n.callSound = mode, mode
+		switch {
+		case v == "":
+			v = "system"
+		case v == "watui", kind == SoundCall && Builtin[v] != nil:
+			v = def
+		}
+		switch {
+		case v == "off" || v == "system":
+		case Builtin[v] != nil:
+			path, err := BuiltinFile(cacheDir, v)
+			if err != nil {
+				path = "" // can't write it: fall back to the desktop's sound
+			}
+			v = path
+		}
+		sounds[kind] = v
 	}
+	n.mu.Lock()
+	n.sounds = sounds
+	n.mu.Unlock()
 }
 
 // SoundDir is where SetSound keeps the generated "watui" sounds.
@@ -80,16 +105,15 @@ func (n *Notifier) Send(note Note) {
 	n.mu.Unlock()
 
 	n.mu.Lock()
-	mode := n.soundMode
-	sound := n.messageSound
-	if note.Sound == SoundCall {
-		sound = n.callSound
-	}
+	sound, set := n.sounds[note.Sound]
 	n.mu.Unlock()
-	if mode != "off" && mode != "system" {
+	switch {
+	case !set:
+		sound = "system" // SetSound not called
+	case sound != "off" && sound != "system" && sound != "":
 		Play(sound)
 	}
-	n.show(note, id, mode == "system" || (mode != "off" && sound == ""))
+	n.show(note, id, sound == "system" || sound == "")
 }
 
 // Forget drops the replace id so the next note for this key pops up fresh.

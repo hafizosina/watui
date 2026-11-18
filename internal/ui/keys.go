@@ -9,8 +9,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/hafizosina/watui/internal/notify"
 )
 
 func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -597,7 +595,7 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 		_, arg, _ := strings.Cut(cmd, " ")
 		arg = strings.TrimSpace(arg)
 		if arg == "" {
-			m.setFlash(fmt.Sprintf("images=%s image_width=%d image_height=%d collapse_lines=%d notify=%s notify_sound=%s show_deleted=%s theme=%s", m.cfg.Images, m.cfg.ImageWidth, m.cfg.ImageHeight, m.cfg.CollapseLines, m.cfg.Notify, m.cfg.NotifySound, onOff(m.cfg.ShowDeleted), currentTheme), false)
+			m.setFlash(fmt.Sprintf("images=%s image_width=%d image_height=%d collapse_lines=%d notify=%s notify_sound=%s%s show_deleted=%s theme=%s", m.cfg.Images, m.cfg.ImageWidth, m.cfg.ImageHeight, m.cfg.CollapseLines, m.cfg.Notify, m.cfg.NotifySound, kindSounds(m.cfg), onOff(m.cfg.ShowDeleted), currentTheme), false)
 			return m, nil
 		}
 		if err := m.cfg.Set(arg); err != nil {
@@ -612,10 +610,8 @@ func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {
 				m.setFlash(err.Error(), true)
 				return m, nil
 			}
-		case "notify_sound":
-			if m.opts.Notifier != nil {
-				m.opts.Notifier.SetSound(m.cfg.NotifySound, notify.SoundDir())
-			}
+		case "notify_sound", "notify_sound_personal", "notify_sound_mention", "notify_sound_group":
+			ApplySounds(m.opts.Notifier, m.cfg)
 		}
 		if m.images != nil {
 			m.images.Reset()

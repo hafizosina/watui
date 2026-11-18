@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hafizosina/watui/internal/config"
+	"github.com/hafizosina/watui/internal/notify"
 	"github.com/hafizosina/watui/internal/profile"
 	"github.com/hafizosina/watui/internal/store"
 	"github.com/hafizosina/watui/internal/wa"
@@ -29,9 +30,15 @@ func TestNotificationRules(t *testing.T) {
 	if !ok || note.Title != "[default] +628111" || note.Body != "halo bro" {
 		t.Fatalf("DM should notify with profile prefix, got ok=%v %+v", ok, note)
 	}
+	if note.Sound != notify.SoundMessage {
+		t.Errorf("a DM should use the message sound, got %v", note.Sound)
+	}
 	note, ok = m.noteFor(in("work", group, "628222@s.whatsapp.net", "Sari", "deploy done"))
 	if !ok || note.Title != "[work] Sari @ BE Squad" {
 		t.Fatalf("group note should show sender @ group, got %+v", note)
+	}
+	if note.Sound != notify.SoundGroup {
+		t.Errorf("plain group chatter should use the group sound, got %v", note.Sound)
 	}
 	m = step(m, key("g"), key("t"), key("1"), key(" "))
 	labels := strings.Join(labelsOf(m.menu.items), "|")
@@ -77,13 +84,13 @@ func TestNotificationRules(t *testing.T) {
 	}
 	mention := in("work", group, "628222@s.whatsapp.net", "Sari", "@you can you check?")
 	mention.Msg.MentionsMe = true
-	if note, ok := m.noteFor(mention); !ok || note.Title != "[work] @ Sari mentioned you · BE Squad" {
-		t.Errorf("a mention in a muted group should notify, got ok=%v %+v", ok, note)
+	if note, ok := m.noteFor(mention); !ok || note.Title != "[work] @ Sari mentioned you · BE Squad" || note.Sound != notify.SoundMention {
+		t.Errorf("a mention in a muted group should notify with the mention sound, got ok=%v %+v", ok, note)
 	}
 	reply := in("work", group, "628222@s.whatsapp.net", "Sari", "agreed")
 	reply.Msg.RepliesMe = true
-	if note, ok := m.noteFor(reply); !ok || note.Title != "[work] ↩ Sari replied to you · BE Squad" {
-		t.Errorf("a reply to me in a muted group should notify, got ok=%v %+v", ok, note)
+	if note, ok := m.noteFor(reply); !ok || note.Title != "[work] ↩ Sari replied to you · BE Squad" || note.Sound != notify.SoundMention {
+		t.Errorf("a reply to me in a muted group should notify with the mention sound, got ok=%v %+v", ok, note)
 	}
 	_ = work.WA.Store.SetMutedUntil(group, time.Time{})
 	_ = personal.WA.Store.SetMutedUntil(dm, time.Time{})

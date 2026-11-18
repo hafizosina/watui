@@ -325,8 +325,13 @@ image_height = 15
 collapse_lines = 15    # long messages fold after this many lines (0 = never)
 show_deleted = on      # on: keep showing messages deleted for everyone | off: "message deleted"
 notify = on            # on | private (sender only) | off
-notify_sound = watui   # watui (own chime; calls ring) | system | off | /path/to/sound.ogg
+notify_sound = watui   # watui | sword | chime | soft | ping | system | off | /path/to/sound.ogg
+notify_sound_personal =   # per kind, empty = follow notify_sound (same values, minus watui)
+notify_sound_mention =
+notify_sound_group =
 ```
+
+**Notification sounds:** with `notify_sound = watui`, direct messages and @mentions / replies to you in groups play `sword` (a blade being drawn), other group messages play `chime`, and calls ring. Give a kind its own sound with `notify_sound_personal`, `notify_sound_mention` or `notify_sound_group`, e.g. `notify_sound_mention = ping` or `notify_sound_group = off`. Try them live with `:set notify_sound_group=soft`.
 
 ### Themes
 

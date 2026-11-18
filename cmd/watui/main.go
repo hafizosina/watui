@@ -179,9 +179,7 @@ func run() error {
 		}
 		prog.Send(ui.OpenChatMsg{Profile: name, JID: jid})
 	})
-	if dir := notify.SoundDir(); dir != "" {
-		notifier.SetSound(cfg.NotifySound, dir)
-	}
+	ui.ApplySounds(notifier, cfg)
 	watch := func(p *profile.Profile) {
 		name := p.Name
 		p.WA.OnCall(func(ev wa.CallEvent) {

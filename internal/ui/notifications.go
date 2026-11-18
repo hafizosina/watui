@@ -45,6 +45,19 @@ func (m Model) profileByName(name string) (*profile.Profile, int) {
 	return nil, -1
 }
 
+// ApplySounds hands the notification sound settings to the notifier.
+func ApplySounds(n *notify.Notifier, cfg config.Config) {
+	dir := notify.SoundDir()
+	if n == nil || dir == "" {
+		return
+	}
+	n.SetSound(cfg.NotifySound, map[notify.SoundKind]string{
+		notify.SoundMessage: cfg.NotifySoundPersonal,
+		notify.SoundMention: cfg.NotifySoundMention,
+		notify.SoundGroup:   cfg.NotifySoundGroup,
+	}, dir)
+}
+
 // noteFor decides whether a new message deserves a desktop notification.
 // focusTerminal is swapped out in tests so they never switch the real tmux window or raise kitty.
 var focusTerminal = notify.FocusTerminal
@@ -89,7 +102,14 @@ func (m Model) noteFor(in IncomingMsg) (notify.Note, bool) {
 			body = "New message"
 		}
 	}
-	return notify.Note{Key: NoteKey(p.Name, in.Msg.ChatJID), Title: title, Body: body}, true
+	sound := notify.SoundMessage
+	switch {
+	case chat.IsGroup && forMe:
+		sound = notify.SoundMention
+	case chat.IsGroup:
+		sound = notify.SoundGroup
+	}
+	return notify.Note{Key: NoteKey(p.Name, in.Msg.ChatJID), Title: title, Body: body, Sound: sound}, true
 }
 
 func (m Model) incoming(in IncomingMsg) (tea.Model, tea.Cmd) {

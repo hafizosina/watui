@@ -6,6 +6,7 @@ All notable changes to watui. Versions follow [Semantic Versioning](https://semv
 
 ### Added
 - Drafts: text left in Compose when you switch chats is kept per chat (with @mentions and the reply you started) and comes back when you return, also after a restart. The chat list shows it as `Draft: …`.
+- Separate notification sounds: direct messages and @mentions / replies to you play a new `sword` sound, other group messages the old chime. Each kind can be changed with `notify_sound_personal`, `notify_sound_mention` and `notify_sound_group` (built-in `sword`, `chime`, `soft`, `ping`, or `system`, `off`, a file).
 - Download progress on the attachment itself: while a file, video, voice note or picture downloads, a bar with the percentage replaces its `space → Open` / `Play` hint (no message at the bottom).
 
 ### Changed

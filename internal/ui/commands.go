@@ -5,6 +5,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/hafizosina/watui/internal/config"
 )
 
 type command struct {
@@ -39,14 +41,17 @@ var commands = []command{
 }
 
 var settingValues = map[string][]string{
-	"images":         {"always", "thumbnail", "off"},
-	"notify":         {"on", "private", "off"},
-	"notify_sound":   {"watui", "system", "off"},
-	"collapse_lines": {"0", "15", "30"},
-	"show_deleted":   {"on", "off"},
-	"image_width":    {"30", "40", "60"},
-	"image_height":   {"10", "15", "20"},
-	"theme":          nil,
+	"images":                {"always", "thumbnail", "off"},
+	"notify":                {"on", "private", "off"},
+	"notify_sound":          {"watui", "sword", "chime", "soft", "ping", "system", "off"},
+	"notify_sound_personal": {"sword", "chime", "soft", "ping", "system", "off", ""},
+	"notify_sound_mention":  {"sword", "chime", "soft", "ping", "system", "off", ""},
+	"notify_sound_group":    {"chime", "sword", "soft", "ping", "system", "off", ""},
+	"collapse_lines":        {"0", "15", "30"},
+	"show_deleted":          {"on", "off"},
+	"image_width":           {"30", "40", "60"},
+	"image_height":          {"10", "15", "20"},
+	"theme":                 nil,
 }
 
 type suggestion struct {
@@ -171,4 +176,19 @@ func (m Model) suggestionView(list []suggestion) (string, int, int) {
 	}
 	h := len(rows) + 2
 	return panel("Commands", "tab / ^n next · enter run", strings.Join(rows, "\n"), w, h, true), w, h
+}
+
+// kindSounds lists the per-kind sounds that are set, for :set.
+func kindSounds(cfg config.Config) string {
+	out := ""
+	for _, kv := range [][2]string{
+		{"notify_sound_personal", cfg.NotifySoundPersonal},
+		{"notify_sound_mention", cfg.NotifySoundMention},
+		{"notify_sound_group", cfg.NotifySoundGroup},
+	} {
+		if kv[1] != "" {
+			out += " " + kv[0] + "=" + kv[1]
+		}
+	}
+	return out
 }
