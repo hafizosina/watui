@@ -301,9 +301,17 @@ func (m Model) chatRow(c store.Chat, selected bool, w int) string {
 			preview = "⊘ message deleted"
 		}
 	}
+	previewStyle := styleDim
+	if d, ok := m.drafts[c.JID]; ok && c.JID != m.openJID {
+		text := strings.Join(strings.Fields(sanitize(d.Text)), " ")
+		if text == "" {
+			text = "↩ reply"
+		}
+		preview, previewStyle = "Draft: "+text, styleDraft
+	}
 	preview = ansi.Truncate(preview, max(1, w-3-lipgloss.Width(badge)), "…")
 	gap2 := max(0, w-2-lipgloss.Width(preview)-lipgloss.Width(badge))
-	line2 := paint(lipgloss.NewStyle(), " ") + paint(styleDim, preview) +
+	line2 := paint(lipgloss.NewStyle(), " ") + paint(previewStyle, preview) +
 		paint(lipgloss.NewStyle(), strings.Repeat(" ", gap2)) + badge + paint(lipgloss.NewStyle(), " ")
 	return line1 + "\n" + line2
 }

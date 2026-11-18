@@ -63,7 +63,7 @@ var (
 	styleBadgeForMe, styleMention, styleMentionMe                          lipgloss.Style
 	styleSearchHit                                                         lipgloss.Style
 	styleDay, styleDeleted, styleRead, styleFailed, styleError, styleInfo  lipgloss.Style
-	styleStatusBar, styleKey, styleMuted                                   lipgloss.Style
+	styleStatusBar, styleKey, styleMuted, styleDraft                       lipgloss.Style
 )
 
 func init() {
@@ -188,6 +188,7 @@ func ApplyTheme(t Theme) {
 	styleStatusBar = lipgloss.NewStyle().Background(colBgDark).Foreground(colFgDark)
 	styleKey = lipgloss.NewStyle().Foreground(colBlue).Bold(true)
 	styleMuted = lipgloss.NewStyle().Foreground(colOrange).Bold(true)
+	styleDraft = lipgloss.NewStyle().Foreground(colGreen).Italic(true)
 }
 
 func senderColor(jid string) lipgloss.Color {

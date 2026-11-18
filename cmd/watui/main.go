@@ -231,7 +231,10 @@ func run() error {
 	}
 	os.Stdout.WriteString("\x1b[?7l")
 	defer os.Stdout.WriteString("\x1b[?7h")
-	_, err = prog.Run()
+	final, err := prog.Run()
+	if fm, ok := final.(ui.Model); ok {
+		fm.SaveDraft() // unsent text in Compose survives quitting
+	}
 	return err
 }
 

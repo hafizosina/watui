@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hafizosina/watui/internal/desktop"
+	"github.com/hafizosina/watui/internal/store"
 	"github.com/hafizosina/watui/internal/wa"
 )
 
@@ -222,6 +223,7 @@ func (m Model) attachTitle() string {
 func (m *Model) sendFilesCmd(caption string) tea.Cmd {
 	client, jid, files := m.wa, m.openJID, m.attach
 	m.attach, m.replyTo, m.editing = nil, nil, nil
+	m.setDraft(jid, store.Draft{}) // the caption was the draft
 	what := filepath.Base(files[0].path)
 	if len(files) > 1 {
 		what = fmt.Sprintf("%d files", len(files))

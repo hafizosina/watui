@@ -180,8 +180,10 @@ func (m Model) switchProfile(i int) (tea.Model, tea.Cmd) {
 		m.focus = focusList
 		return m, nil
 	}
+	m.saveDraft()
 	m.active, m.profCursor = i, i
 	m.wa, m.images = p.WA, p.Images
+	m.drafts = nil // the next refresh loads this profile's
 	m.allChats, m.chats = nil, nil
 	m.names = map[string]string{}
 	m.cursor, m.offset, m.filter, m.showArchived = 0, 0, "", false

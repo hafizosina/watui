@@ -105,7 +105,7 @@ CREATE INDEX IF NOT EXISTS messages_unread ON messages (chat_jid) WHERE read = 0
 `
 
 func Open(db *sql.DB) (*Store, error) {
-	if _, err := db.Exec(schema + receiptsSchema); err != nil {
+	if _, err := db.Exec(schema + receiptsSchema + draftsSchema); err != nil {
 		return nil, err
 	}
 	s := &Store{db: db}
@@ -296,6 +296,9 @@ func (s *Store) MarkReadByIDs(chatJID string, ids []string, at time.Time) error 
 
 func (s *Store) DeleteChat(jid string) error {
 	if _, err := s.db.Exec(`DELETE FROM messages WHERE chat_jid = ?`, jid); err != nil {
+		return err
+	}
+	if _, err := s.db.Exec(`DELETE FROM drafts WHERE jid = ?`, jid); err != nil {
 		return err
 	}
 	_, err := s.db.Exec(`DELETE FROM chats WHERE jid = ?`, jid)

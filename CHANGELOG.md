@@ -4,6 +4,9 @@ All notable changes to watui. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Added
+- Drafts: text left in Compose when you switch chats is kept per chat (with @mentions and the reply you started) and comes back when you return, also after a restart. The chat list shows it as `Draft: …`.
+
 ### Changed
 - Deleting in Compose (`dd`, `x`, `dw`, `cw`, visual `d`, …) no longer copies the text: it doesn't touch the clipboard, and `p` doesn't paste it back. Only yanks copy.
 

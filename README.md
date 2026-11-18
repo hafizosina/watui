@@ -197,6 +197,8 @@ A header above the messages shows who the open chat is with: avatar, name, pin/m
 
 **Large Compose:** `Ctrl+G` (from Compose or Messages) or `:big` makes Compose take about two thirds of the chat column — handy for writing and re-reading a long message; the messages above stay visible. `Ctrl+G` again shrinks it back. It stays large across chats until you turn it off.
 
+**Drafts:** switch to another chat with text still in Compose and it is kept as that chat's draft, with its @mentions and the reply you started. The chat list shows `Draft: …` under the chat, and the text is back in Compose when you return, even after restarting watui. Sending it, or emptying Compose, drops the draft. Editing a message is not a draft.
+
 | Mode | Keys |
 |---|---|
 | INSERT | type; `Enter` new line; `Esc` or `jk` → NORMAL; `Ctrl+w` delete word; `Ctrl+u` delete to line start |

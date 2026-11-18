@@ -105,6 +105,7 @@ type Model struct {
 	menu         *menu
 	replyTo      *store.Message
 	editing      *store.Message
+	drafts       map[string]store.Draft // chat JID → unsent Compose text; nil until loaded
 	forceShow    map[string]bool
 	forceHide    map[string]bool
 	shownImages  map[string]media.Quality
@@ -237,6 +238,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.markReadCmd()
 	case tea.BlurMsg:
 		m.focused = false
+		m.saveDraft()
 		return m, nil
 	case ChangedMsg:
 		if p := m.activeProfile(); p != nil && msg.Profile != "" && msg.Profile != p.Name {
@@ -356,6 +358,12 @@ func (m *Model) refresh() {
 	if err != nil {
 		m.setFlash("load chats: "+err.Error(), true)
 		return
+	}
+	if m.drafts == nil {
+		if m.drafts, err = m.wa.Store.Drafts(); err != nil {
+			m.drafts = map[string]store.Draft{}
+			m.setFlash("load drafts: "+err.Error(), true)
+		}
 	}
 	m.allChats = chats
 	if p := m.activeProfile(); p != nil {
@@ -501,8 +509,13 @@ func (m Model) openChat() (store.Chat, bool) {
 func (m *Model) open(jid string) {
 	m.info = nil
 	if m.openJID != jid {
+		m.saveDraft()
 		m.input.Reset()
 		m.replyTo, m.editing = nil, nil
+		if d, ok := m.drafts[jid]; ok {
+			m.input.LoadDraft(d.Text, d.Mentions)
+			m.replyTo = d.ReplyTo
+		}
 		m.marked, m.markedMsgs, m.rangeFrom = map[string]bool{}, map[string]store.Message{}, ""
 		m.clearAttachments()
 		m.msgSearch, m.msgHits, m.msgHit = "", nil, -1
@@ -542,6 +555,9 @@ func (m *Model) enterCompose(v vimMode) {
 }
 
 func (m *Model) enterNormal() {
+	if m.mode == modeInsert {
+		m.saveDraft() // also kept if watui is killed before you switch chats
+	}
 	m.mode = modeNormal
 	m.input.Blur()
 	m.prompt.Blur()
@@ -566,11 +582,66 @@ func (m Model) markReadCmd() tea.Cmd {
 	}
 }
 
+// saveDraft keeps what is in Compose for the open chat, to put back when you
+// return to it (also after a restart). An edit in progress is not a draft: the
+// chat keeps the draft it had before.
+func (m *Model) saveDraft() {
+	if m.openJID == "" || m.wa == nil || m.editing != nil {
+		return
+	}
+	var d store.Draft
+	d.Text, d.Mentions = m.input.Draft()
+	if strings.TrimSpace(d.Text) == "" {
+		d.Text, d.Mentions = "", nil
+	}
+	d.ReplyTo = m.replyTo
+	m.setDraft(m.openJID, d)
+}
+
+func (m *Model) setDraft(jid string, d store.Draft) {
+	if jid == "" || m.wa == nil {
+		return
+	}
+	if m.drafts == nil {
+		m.drafts = map[string]store.Draft{}
+	}
+	old, had := m.drafts[jid]
+	if d.Empty() {
+		if !had {
+			return
+		}
+		delete(m.drafts, jid)
+	} else {
+		if had && old.Text == d.Text && sameReply(old.ReplyTo, d.ReplyTo) && len(old.Mentions) == len(d.Mentions) {
+			return
+		}
+		m.drafts[jid] = d
+	}
+	if err := m.wa.Store.SetDraft(jid, d); err != nil {
+		m.setFlash("save draft: "+err.Error(), true)
+	}
+}
+
+func sameReply(a, b *store.Message) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.ID == b.ID
+}
+
+// SaveDraft keeps the open chat's unsent text when watui quits.
+func (m Model) SaveDraft() {
+	m.saveDraft()
+}
+
 // sendCmd sends text; mentions are the JIDs @mentioned in it.
 func (m *Model) sendCmd(text string, mentions []string) tea.Cmd {
 	client, jid := m.wa, m.openJID
 	replyTo, editing := m.replyTo, m.editing
 	m.replyTo, m.editing = nil, nil
+	if editing == nil {
+		m.setDraft(jid, store.Draft{})
+	}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()

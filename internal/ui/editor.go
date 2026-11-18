@@ -10,6 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/hafizosina/watui/internal/store"
 )
 
 type vimMode int
@@ -160,6 +162,30 @@ func replaceWhole(s, label, with string) string {
 		}
 		s = rest
 	}
+}
+
+// Draft is what Compose holds, with the mentions in it, to keep when you switch chats.
+func (e *editor) Draft() (string, []store.DraftMention) {
+	var mentions []store.DraftMention
+	seen := map[rune]bool{}
+	for _, r := range e.buf {
+		if a, ok := e.atoms[r]; ok && isAtom(r) && !seen[r] {
+			seen[r] = true
+			mentions = append(mentions, store.DraftMention{Label: a.label, User: a.user, JID: a.jid})
+		}
+	}
+	return e.Value(), mentions
+}
+
+// LoadDraft puts a saved draft back in Compose, its mentions picked again.
+func (e *editor) LoadDraft(text string, mentions []store.DraftMention) {
+	e.Reset()
+	e.atoms, e.nextAtom = map[rune]atom{}, 0
+	for _, mn := range mentions {
+		e.atoms[atomBase+e.nextAtom] = atom{label: mn.Label, user: mn.User, jid: mn.JID}
+		e.nextAtom++
+	}
+	e.SetValueKeepMentions(text)
 }
 
 func (e *editor) cellText(r rune) string {

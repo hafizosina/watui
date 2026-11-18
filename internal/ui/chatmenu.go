@@ -102,6 +102,7 @@ func (m *Model) openChatMenu() {
 			if m.openJID == jid {
 				m.openJID, m.messages = "", nil
 			}
+			delete(m.drafts, jid)
 			return m.actionCmd("deleted chat with "+name, func(ctx context.Context) error { return client.DeleteChat(ctx, jid) })
 		})
 		return nil
