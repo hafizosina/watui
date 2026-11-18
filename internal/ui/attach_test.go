@@ -11,10 +11,22 @@ import (
 
 var clipped string
 
-// keep tests off the real clipboard
+// keep tests off the real clipboard, tmux and desktop: opening a notification focuses the
+// terminal and ctrl+h/j/k/l at an edge runs tmux select-pane, which would otherwise switch
+// whatever tmux window or kitty window ran `go test`.
 func TestMain(m *testing.M) {
 	clipboardWriter = func(text string) { clipped = text }
-	os.Exit(m.Run())
+	focusTerminal = func() {}
+	tmuxDir, err := os.MkdirTemp("", "watui-test-tmux")
+	if err != nil {
+		panic(err)
+	}
+	os.Unsetenv("TMUX")
+	os.Unsetenv("TMUX_PANE")
+	os.Setenv("TMUX_TMPDIR", tmuxDir)
+	code := m.Run()
+	os.RemoveAll(tmuxDir)
+	os.Exit(code)
 }
 
 func TestFilesFromURIs(t *testing.T) {

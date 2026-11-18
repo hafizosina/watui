@@ -46,6 +46,9 @@ func (m Model) profileByName(name string) (*profile.Profile, int) {
 }
 
 // noteFor decides whether a new message deserves a desktop notification.
+// focusTerminal is swapped out in tests so they never switch the real tmux window or raise kitty.
+var focusTerminal = notify.FocusTerminal
+
 func (m Model) noteFor(in IncomingMsg) (notify.Note, bool) {
 	if m.cfg.Notify == config.NotifyOff || in.Msg.FromMe || time.Since(in.Msg.TS) > notifyMaxAge {
 		return notify.Note{}, false
@@ -122,7 +125,7 @@ func (m Model) openFromNotification(msg OpenChatMsg) (tea.Model, tea.Cmd) {
 	if m.opts.Notifier != nil {
 		m.opts.Notifier.Forget(NoteKey(msg.Profile, msg.JID))
 	}
-	go notify.FocusTerminal()
+	go focusTerminal()
 	return m, m.markReadCmd()
 }
 
