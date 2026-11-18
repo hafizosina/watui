@@ -493,6 +493,7 @@ func TestArchivedRow(t *testing.T) {
 		t.Fatal("the Archived row has no chat menu")
 	}
 	m = step(m, key("J"))
+	m = step(m, stepChatMsg{m.stepSeq})
 	if m.openJID != "1203630@g.us" {
 		t.Fatalf("J from the Archived row should open the first real chat, got %q", m.openJID)
 	}
@@ -656,5 +657,36 @@ func TestBigCompose(t *testing.T) {
 	m = step(m, tea.KeyMsg{Type: tea.KeyCtrlG})
 	if m.composeBig || m.composeH() != small {
 		t.Errorf("ctrl+g again should shrink back to %d, got %d", small, m.composeH())
+	}
+}
+
+func TestStepChatOpensWhereItStops(t *testing.T) {
+	m := step(testModel(t), tea.WindowSizeMsg{Width: 110, Height: 34}, ChangedMsg{})
+	if len(m.chats) < 2 {
+		t.Fatalf("test needs two chats, got %d", len(m.chats))
+	}
+	before := m.openJID
+	m = step(m, key("J"))
+	first := m.stepSeq
+	m = step(m, key("J"))
+	if m.openJID != before {
+		t.Fatalf("J should not open a chat while still moving, opened %q", m.openJID)
+	}
+	m = step(m, stepChatMsg{first})
+	if m.openJID != before {
+		t.Fatal("a stale settle should not open the chat passed over")
+	}
+	want := m.stepTo
+	m = step(m, stepChatMsg{m.stepSeq})
+	if want == "" || m.openJID != want {
+		t.Fatalf("settling should open %q, got %q", want, m.openJID)
+	}
+
+	// another key right after J acts on the chat J stopped on
+	m = step(m, key("K"))
+	want = m.stepTo
+	m = step(m, key("i"))
+	if want == "" || m.openJID != want || m.stepTo != "" {
+		t.Fatalf("a key after K should open %q first, got %q", want, m.openJID)
 	}
 }

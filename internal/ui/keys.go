@@ -12,6 +12,12 @@ import (
 )
 
 func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.stepTo != "" && k.String() != "J" && k.String() != "K" {
+		// any other key acts on the chat J/K stopped on
+		settled := m.settleStep()
+		next, cmd := m.handleKey(k)
+		return next, tea.Batch(settled, cmd)
+	}
 	if m.menu != nil {
 		return m.menuKey(k)
 	}
@@ -501,6 +507,13 @@ func (m *Model) bottom() {
 	m.vp.GotoBottom()
 }
 
+// stepChatSettle is how long J/K wait for the next press before opening the
+// chat under the cursor: holding J runs down the list without loading every
+// chat on the way.
+var stepChatSettle = 150 * time.Millisecond
+
+type stepChatMsg struct{ seq int }
+
 func (m Model) stepChat(delta int) (tea.Model, tea.Cmd) {
 	if len(m.chats) == 0 {
 		return m, nil
@@ -517,9 +530,27 @@ func (m Model) stepChat(delta int) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	m.open(c.JID)
 	m.focus = focusChat
-	return m, m.markReadCmd()
+	m.stepSeq++
+	if c.JID == m.openJID {
+		m.stepTo = ""
+		return m, nil
+	}
+	m.stepTo = c.JID
+	seq := m.stepSeq
+	return m, tea.Tick(stepChatSettle, func(time.Time) tea.Msg { return stepChatMsg{seq} })
+}
+
+// settleStep opens the chat J/K stopped on, if it hasn't been opened yet.
+func (m *Model) settleStep() tea.Cmd {
+	jid := m.stepTo
+	if jid == "" {
+		return nil
+	}
+	m.stepTo = ""
+	m.open(jid)
+	m.focus = focusChat
+	return m.markReadCmd()
 }
 
 func (m Model) runCommand(cmd string) (tea.Model, tea.Cmd) {

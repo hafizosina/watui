@@ -89,6 +89,8 @@ type Model struct {
 	focused       bool
 	showHelp      bool
 	pendingG      bool
+	stepTo        string // chat J/K moved to, opened once they stop
+	stepSeq       int
 
 	allChats     []store.Chat
 	chats        []store.Chat
@@ -323,6 +325,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.CursorEnd()
 		m.enterInsert()
 		return m, nil
+	case stepChatMsg:
+		if msg.seq != m.stepSeq {
+			return m, nil
+		}
+		return m, m.settleStep()
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}

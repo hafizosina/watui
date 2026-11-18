@@ -11,6 +11,7 @@ All notable changes to watui. Versions follow [Semantic Versioning](https://semv
 
 ### Changed
 - Deleting in Compose (`dd`, `x`, `dw`, `cw`, visual `d`, …) no longer copies the text: it doesn't touch the clipboard, and `p` doesn't paste it back. Only yanks copy.
+- Holding or tapping `J` / `K` quickly runs through the chat list without loading every chat on the way: the chat opens when you stop (150 ms after the last press). Any other key opens it right away.
 
 ### Fixed
 - In tmux, a picture that arrived while watui's pane was hidden showed as an empty block (tmux drops kitty graphics for hidden panes with `allow-passthrough on`). watui now re-sends the open chat's pictures when its pane gets focus back; the README now recommends `allow-passthrough all`.
