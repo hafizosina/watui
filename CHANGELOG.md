@@ -4,6 +4,8 @@ All notable changes to watui. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+## [v0.1.2] - 2026-11-18
+
 ### Added
 - Drafts: text left in Compose when you switch chats is kept per chat (with @mentions and the reply you started) and comes back when you return, also after a restart. The chat list shows it as `Draft: …`.
 - Separate notification sounds: direct messages and @mentions / replies to you play a new `sword` sound, other group messages the old chime. Each kind can be changed with `notify_sound_personal`, `notify_sound_mention` and `notify_sound_group` (built-in `sword`, `chime`, `soft`, `ping`, or `system`, `off`, a file).
@@ -16,6 +18,7 @@ All notable changes to watui. Versions follow [Semantic Versioning](https://semv
 ### Fixed
 - In tmux, a picture that arrived while watui's pane was hidden showed as an empty block (tmux drops kitty graphics for hidden panes with `allow-passthrough on`). watui now re-sends the open chat's pictures when its pane gets focus back; the README now recommends `allow-passthrough all`.
 - Opening, playing or saving a large file no longer fails after 60 seconds: a download now only stops when nothing arrives for a minute. Downloads stream to disk instead of being held in memory.
+- A joined emoji (e.g. a family emoji) in a chat name or preview no longer pushes the row past the Chats box border in tmux.
 
 ## [v0.1.1] - 2026-11-17
 
@@ -63,6 +66,7 @@ First release.
 - Text from WhatsApp is cleaned before display (no terminal escape sequences).
 - Only a message's author can edit it; the author or a group admin can delete it.
 
-[Unreleased]: https://github.com/hafizosina/watui/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/hafizosina/watui/compare/v0.1.2...HEAD
+[v0.1.2]: https://github.com/hafizosina/watui/compare/v0.1.1...v0.1.2
 [v0.1.1]: https://github.com/hafizosina/watui/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/hafizosina/watui/releases/tag/v0.1.0
