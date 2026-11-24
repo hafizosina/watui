@@ -4,6 +4,8 @@ All notable changes to watui. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+## [v0.1.3] - 2026-11-24
+
 ### Added
 - Mouse support: the wheel scrolls the chat list, messages and menus; a click opens a chat, selects a message, starts writing in Compose, opens info from the chat header, or picks a menu item or sticker; a right click opens the chat / message / profile menu. Hold `Shift` to select text with the terminal.
 
@@ -69,7 +71,8 @@ First release.
 - Text from WhatsApp is cleaned before display (no terminal escape sequences).
 - Only a message's author can edit it; the author or a group admin can delete it.
 
-[Unreleased]: https://github.com/hafizosina/watui/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/hafizosina/watui/compare/v0.1.3...HEAD
+[v0.1.3]: https://github.com/hafizosina/watui/compare/v0.1.2...v0.1.3
 [v0.1.2]: https://github.com/hafizosina/watui/compare/v0.1.1...v0.1.2
 [v0.1.1]: https://github.com/hafizosina/watui/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/hafizosina/watui/releases/tag/v0.1.0
