@@ -282,6 +282,19 @@ Select a message with `j`/`k`, press `Space`. Move with `Ctrl+n`/`Ctrl+p`, pick 
 
 The files wait in Compose (its title shows `📎 2 files: …`): type a caption if you like (it goes with the first file) and press `Ctrl+S`. `Esc` in the messages pane drops them. Attaching cancels a reply you started — files go out as new messages. A file you send opens and previews straight away, without downloading it back. Downloading a received file, video or voice note shows its progress on the message itself (`━━━━━━────── 50% · 13.5 MB`, where `space → Open` usually is). JPEG/PNG pictures, MP4 videos and MP3/OGG/M4A audio up to 16 MB go as media; everything else, and anything bigger, as a document (up to 2 GB). On Linux, paste needs `xclip` and the dialog `zenity` (macOS has both built in); `ffprobe`/`ffmpeg` add video length and preview (optional).
 
+### Mouse
+
+| Where | Wheel | Left click | Right click |
+|---|---|---|---|
+| Chats | move the highlight | open the chat | chat menu |
+| Profile | | focus the panel | profile menu |
+| Messages | select next / previous message | select the message | message menu (bulk menu with messages marked) |
+| Compose | | start writing | |
+| Menus, popups | move | pick the item · outside closes | |
+| Stickers | move | send the sticker · outside closes | |
+
+A left click on the chat header opens Contact / Group info. watui takes the mouse, so to select text with the terminal hold `Shift` while dragging (kitty, most terminals; in tmux too).
+
 ### Selecting several messages
 
 In the messages pane, `v` marks or unmarks the selected message (a magenta bar shows next to it), and `V` starts a range that follows `j`/`k` — press `V` again to keep it. The panel title shows how many are selected. `Space` opens the bulk menu, `Esc` clears the selection; switching chats clears it too.

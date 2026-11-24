@@ -223,7 +223,7 @@ func run() error {
 			watch(p)
 		},
 	})
-	prog = tea.NewProgram(model, tea.WithAltScreen(), tea.WithReportFocus())
+	prog = tea.NewProgram(model, tea.WithAltScreen(), tea.WithReportFocus(), tea.WithMouseCellMotion())
 	for _, p := range profiles {
 		watch(p)
 	}

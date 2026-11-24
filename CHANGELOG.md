@@ -4,6 +4,9 @@ All notable changes to watui. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Added
+- Mouse support: the wheel scrolls the chat list, messages and menus; a click opens a chat, selects a message, starts writing in Compose, opens info from the chat header, or picks a menu item or sticker; a right click opens the chat / message / profile menu. Hold `Shift` to select text with the terminal.
+
 ## [v0.1.2] - 2026-11-18
 
 ### Added
